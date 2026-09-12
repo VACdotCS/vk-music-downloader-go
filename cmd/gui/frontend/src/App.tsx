@@ -186,6 +186,8 @@ export default function App() {
 
   const cancelPlaylistsDownload = async () => {
     await CancelDownload();
+    currentPlaylistIdRef.current = null;
+    setActivePlaylistId(null);
     setIsPlaylistsDownloading(false);
   };
 
@@ -203,10 +205,14 @@ export default function App() {
       setProgressLog({});
       try {
         await DownloadUserPlaylist(p.id, p.title);
+        setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
         const localProgress = await CheckPlaylistLocalProgress(p.title);
-        const newPercent = (localProgress.downloaded / p.count) * 100;
-        setPlaylistProgresses(prev => ({...prev, [p.id]: newPercent > 100 ? 100 : newPercent}));
         setPlaylistErrors(prev => ({...prev, [p.id]: localProgress.errors}));
+        if (localProgress.errors > 0) {
+          const safeCount = p.count || 1;
+          const okPercent = Math.min((localProgress.downloaded / safeCount) * 100, 100);
+          setPlaylistProgresses(prev => ({...prev, [p.id]: okPercent}));
+        }
       } catch (e) {
         break; // Ошибка токена или отмена прервет цикл
       }
@@ -224,11 +230,17 @@ export default function App() {
     setProgressLog({});
     try {
       await DownloadUserPlaylist(p.id, p.title);
-      // После завершения пересчитываем локальный прогресс, чтобы он зафиксировал txt-файл с ошибками
+      // Принудительно ставим 100% - скачивание завершилось (с ошибками или без)
+      setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
+      // Уточняем реальные ошибки из txt-файла
       const localProgress = await CheckPlaylistLocalProgress(p.title);
-      const newPercent = (localProgress.downloaded / p.count) * 100;
-      setPlaylistProgresses(prev => ({...prev, [p.id]: newPercent > 100 ? 100 : newPercent}));
       setPlaylistErrors(prev => ({...prev, [p.id]: localProgress.errors}));
+      // Если были ошибки, корректируем полоску чтобы показать красный сегмент
+      if (localProgress.errors > 0) {
+        const safeCount = p.count || 1;
+        const okPercent = Math.min((localProgress.downloaded / safeCount) * 100, 100);
+        setPlaylistProgresses(prev => ({...prev, [p.id]: okPercent}));
+      }
     } catch (e) {
       console.error(e);
     } finally {
