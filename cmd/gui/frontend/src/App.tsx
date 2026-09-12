@@ -67,12 +67,7 @@ export default function App() {
 
       // Авто-логаут при протухании токена (400 ошибки)
       if (data.status === 'error-token') {
-        alert("Токен или ссылки устарели (Ошибка 400). Пожалуйста, получите новый токен (через JSON перехват).");
-        CancelDownload().then(() => {
-          ClearToken().then(() => {
-            window.location.reload();
-          });
-        });
+        ClearToken().then(() => window.location.reload());
       }
     });
   }, []);
@@ -120,13 +115,13 @@ export default function App() {
     } catch (e) {
       const errStr = String(e);
       if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
-        alert("Токен устарел! Пожалуйста, получите новый токен (через JSON перехват).");
-        ClearToken().then(() => window.location.reload());
+        await ClearToken();
+        checkToken();
       } else {
         alert('Ошибка: ' + errStr);
       }
-      setIsDownloading(false);
     }
+    setIsDownloading(false);
   };
 
   const cancelDownload = async () => {
@@ -165,7 +160,13 @@ export default function App() {
       
       setPlaylistsMode(true);
     } catch (e) {
-      alert('Ошибка при получении плейлистов: ' + e);
+      const errStr = String(e);
+      if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
+        await ClearToken();
+        checkToken();
+      } else {
+        alert('Ошибка при получении плейлистов: ' + e);
+      }
     }
     setLoading(false);
   };
