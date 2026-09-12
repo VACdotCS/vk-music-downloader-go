@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/gosuri/uilive"
 	"github.com/pterm/pterm"
 	"vk-music-downloader-go/internal/api"
 	"vk-music-downloader-go/internal/cache"
@@ -52,7 +53,9 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 		batch := toDownload[start:end]
 		workerPool := pool.NewWorkerPool(batchSize)
 
-		area, _ := pterm.DefaultArea.Start()
+		writer := uilive.New()
+		writer.Start()
+
 		lines := make([]string, len(batch))
 		var linesMu sync.Mutex
 
@@ -62,21 +65,33 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 			lines[i] = "⏳ " + taskTitle
 		}
 
-		// Эмулируем работу listr2 / Event Loop: 
-		// Отрисовываем терминал строго раз в 100мс, не позволяя воркерам спамить экран
 		done := make(chan struct{})
 		go func() {
-			ticker := time.NewTicker(100 * time.Millisecond)
+			ticker := time.NewTicker(150 * time.Millisecond) // Увеличиваем интервал (меньше нагрузка на консоль)
 			defer ticker.Stop()
+			
+			var lastContent string
+			
 			for {
 				select {
 				case <-ticker.C:
 					linesMu.Lock()
-					area.Update(strings.Join(lines, "\n"))
+					currentContent := strings.Join(lines, "\n")
+					
+					if currentContent != lastContent {
+						for _, l := range lines {
+							fmt.Fprintln(writer, l)
+						}
+						writer.Flush()
+						lastContent = currentContent
+					}
 					linesMu.Unlock()
 				case <-done:
 					linesMu.Lock()
-					area.Update(strings.Join(lines, "\n"))
+					for _, l := range lines {
+						fmt.Fprintln(writer, l)
+					}
+					writer.Flush()
 					linesMu.Unlock()
 					return
 				}
@@ -136,7 +151,7 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 		wg.Wait()
 		
 		close(done)
-		area.Stop()
+		writer.Stop()
 	}
 }
 
