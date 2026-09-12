@@ -22,7 +22,18 @@ func GetPath() string {
 	if _, err := os.Stat(localFfmpeg); err == nil {
 		return localFfmpeg
 	}
-	return "ffmpeg"
+	
+	// Если локального нет, ищем в глобальных переменных среды (PATH)
+	globalPath, err := exec.LookPath("ffmpeg")
+	if err == nil {
+		absPath, err := filepath.Abs(globalPath)
+		if err == nil {
+			return absPath
+		}
+		return globalPath
+	}
+	
+	return "ffmpeg (не установлен)"
 }
 
 // CheckAndDownload проверяет наличие ffmpeg. Если его нет, скачивает и устанавливает локально.
