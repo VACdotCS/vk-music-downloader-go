@@ -159,7 +159,7 @@ func (d *Downloader) ProcessStream(m3u8Url, outputTsFile, outputMp3File string, 
 	if err != nil {
 		return err
 	}
-	
+
 	total := len(segments)
 	for i, segment := range segments {
 		var key, iv []byte
@@ -169,7 +169,7 @@ func (d *Downloader) ProcessStream(m3u8Url, outputTsFile, outputMp3File string, 
 				tsFile.Close()
 				return err
 			}
-			
+
 			if segment.Key.IV != "" {
 				ivHex := strings.TrimPrefix(segment.Key.IV, "0x")
 				iv, _ = hex.DecodeString(ivHex)

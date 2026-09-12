@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"sync"
 	"unicode/utf8"
 
@@ -55,8 +54,8 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 		multi.Start()
 
 		var wg sync.WaitGroup
-		
-		for i, audio := range batch {
+
+		for _, audio := range batch {
 			audio := audio // capture loop variable
 			currentIndex := namingIndex
 			namingIndex++
@@ -66,7 +65,7 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 			mp3FilePath := filepath.Join(savePath, fmt.Sprintf("%d. %s", currentIndex, fileName))
 
 			taskTitle := fmt.Sprintf("%d. Скачиваю: %s - %s", currentIndex, audio.Artist, audio.Title)
-			
+
 			// Создаем спиннер для текущего трека
 			spinner, _ := pterm.DefaultSpinner.WithWriter(multi.NewWriter()).Start(taskTitle)
 
@@ -89,7 +88,7 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 				successTitle := fmt.Sprintf("%d. Трек успешно скачан: %s", currentIndex, fileName)
 				marginCorr := int(mathAbs(utf8.RuneCountInString(successTitle) - utf8.RuneCountInString(taskTitle)))
 				progressStr := ui.RenderDownloaderProgress(1.0, utf8.RuneCountInString(taskTitle), maxTitleLength, marginCorr)
-				
+
 				spinner.Success(successTitle + " " + progressStr)
 				return nil
 			})

@@ -2,7 +2,6 @@ package scenarios
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"strings"
 
