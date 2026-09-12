@@ -14,6 +14,7 @@ import (
 	"vk-music-downloader-go/core/api"
 	"vk-music-downloader-go/core/config"
 	"vk-music-downloader-go/core/downloader"
+	"vk-music-downloader-go/core/utils"
 )
 
 // App struct
@@ -222,6 +223,24 @@ func (a *App) DownloadUserPlaylist(playlistID int, title string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+
+	// Создаем лог с треками, которые не удалось скачать (авторские права и т.д.)
+	var failedTracks []string
+	for i, t := range tracks {
+		fileName := fmt.Sprintf("%d. %s", i+1, utils.GetNormalFileName(t.Artist, t.Title))
+		if _, err := os.Stat(filepath.Join(savePath, fileName)); os.IsNotExist(err) {
+			failedTracks = append(failedTracks, fmt.Sprintf("%s - %s", t.Artist, t.Title))
+		}
+	}
+
+	if len(failedTracks) > 0 {
+		errorLogContent := "Эти треки не были скачаны (вероятно, они заблокированы правообладателем):\n\n"
+		for _, f := range failedTracks {
+			errorLogContent += "- " + f + "\n"
+		}
+		os.WriteFile(filepath.Join(savePath, "Ошибки_авторских_прав.txt"), []byte(errorLogContent), 0644)
+	}
+
 	return nil
 }
 
