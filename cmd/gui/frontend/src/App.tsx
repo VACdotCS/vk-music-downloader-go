@@ -20,6 +20,7 @@ export default function App() {
   const [savePath, setSavePath] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPlaylistsDownloading, setIsPlaylistsDownloading] = useState(false);
+  const [activePlaylistId, setActivePlaylistId] = useState<number | null>(null);
   const [progressLog, setProgressLog] = useState<{ [key: number]: any }>({});
   
   const [trackUrl, setTrackUrl] = useState('');
@@ -180,6 +181,7 @@ export default function App() {
     setIsPlaylistsDownloading(true);
     for (const p of playlistsData) {
       if (playlistProgresses[p.id] === 100) continue; // skip already downloaded
+      setActivePlaylistId(p.id);
       currentPlaylistIdRef.current = p.id;
       setPlaylistProgresses(prev => ({...prev, [p.id]: 0}));
       setPlaylistErrors(prev => ({...prev, [p.id]: 0}));
@@ -192,11 +194,13 @@ export default function App() {
       }
     }
     currentPlaylistIdRef.current = null;
+    setActivePlaylistId(null);
     setIsPlaylistsDownloading(false);
   };
 
   const downloadSinglePlaylist = async (p: any) => {
     setIsPlaylistsDownloading(true);
+    setActivePlaylistId(p.id);
     currentPlaylistIdRef.current = p.id;
     setPlaylistProgresses(prev => ({...prev, [p.id]: 0}));
     setPlaylistErrors(prev => ({...prev, [p.id]: 0}));
@@ -208,6 +212,7 @@ export default function App() {
       //
     }
     currentPlaylistIdRef.current = null;
+    setActivePlaylistId(null);
     setIsPlaylistsDownloading(false);
   };
 
@@ -342,7 +347,7 @@ export default function App() {
                   ) : (
                     <div className="playlist-thumb-placeholder"><IconMusic /></div>
                   )}
-                  {prog > 0 && prog < 100 && (
+                  {activePlaylistId === p.id && prog < 100 && (
                      <div className="playlist-overlay-progress">
                         <div className="spinner"></div>
                         <span>{Math.round(prog)}%</span>
@@ -357,6 +362,9 @@ export default function App() {
                         <div className="playlist-overlay-success"><IconCheck /></div>
                      )
                   )}
+                </div>
+                <div className="playlist-progress-bar">
+                  <div className="playlist-progress-fill" style={{width: `${prog}%`}}></div>
                 </div>
                 <div className="playlist-info">
                   <div className="playlist-title" title={p.title}>{p.title}</div>
