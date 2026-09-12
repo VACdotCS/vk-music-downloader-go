@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"unicode/utf8"
 
@@ -50,13 +51,31 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 		batch := toDownload[start:end]
 		workerPool := pool.NewWorkerPool(batchSize)
 
-		multi := pterm.DefaultMultiPrinter
-		multi.Start()
+		area, _ := pterm.DefaultArea.Start()
+		lines := make([]string, len(batch))
+		var linesMu sync.Mutex
+
+		updateDisplay := func() {
+			linesMu.Lock()
+			defer linesMu.Unlock()
+			area.Update(strings.Join(lines, "\n"))
+		}
+
+		for i, audio := range batch {
+			currentIndex := namingIndex + i
+			taskTitle := fmt.Sprintf("%d. Скачиваю: %s - %s", currentIndex, audio.Artist, audio.Title)
+			
+			linesMu.Lock()
+			lines[i] = "⏳ " + taskTitle
+			linesMu.Unlock()
+		}
+		updateDisplay()
 
 		var wg sync.WaitGroup
 
-		for _, audio := range batch {
+		for i, audio := range batch {
 			audio := audio // capture loop variable
+			indexInBatch := i
 			currentIndex := namingIndex
 			namingIndex++
 
@@ -66,30 +85,39 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 
 			taskTitle := fmt.Sprintf("%d. Скачиваю: %s - %s", currentIndex, audio.Artist, audio.Title)
 
-			// Создаем спиннер для текущего трека
-			spinner, _ := pterm.DefaultSpinner.WithWriter(multi.NewWriter()).Start(taskTitle)
-
 			wg.Add(1)
 			workerPool.AddTask(func() error {
 				defer wg.Done()
 
 				progressCb := func(percentage float64) {
 					progressStr := ui.RenderDownloaderProgress(percentage, utf8.RuneCountInString(taskTitle), maxTitleLength, 0)
-					spinner.UpdateText(taskTitle + " " + progressStr)
+					
+					linesMu.Lock()
+					lines[indexInBatch] = "🔄 " + taskTitle + " " + progressStr
+					linesMu.Unlock()
+					updateDisplay()
 				}
 
 				err := dl.ProcessStream(audio.URL, tempFilePath, mp3FilePath, progressCb)
 				if err != nil {
 					_ = cache.CatchAudioStreamError(err, audio, fileName)
-					spinner.Fail(fmt.Sprintf("%d. Ошибка скачивания: %s - %s", currentIndex, audio.Artist, audio.Title))
+					
+					linesMu.Lock()
+					lines[indexInBatch] = pterm.Red("❌ " + fmt.Sprintf("%d. Ошибка скачивания: %s - %s", currentIndex, audio.Artist, audio.Title))
+					linesMu.Unlock()
+					updateDisplay()
 					return err
 				}
 
 				successTitle := fmt.Sprintf("%d. Трек успешно скачан: %s", currentIndex, fileName)
 				marginCorr := int(mathAbs(utf8.RuneCountInString(successTitle) - utf8.RuneCountInString(taskTitle)))
 				progressStr := ui.RenderDownloaderProgress(1.0, utf8.RuneCountInString(taskTitle), maxTitleLength, marginCorr)
-
-				spinner.Success(successTitle + " " + progressStr)
+				
+				linesMu.Lock()
+				lines[indexInBatch] = pterm.Green("✅ " + successTitle + " " + progressStr)
+				linesMu.Unlock()
+				updateDisplay()
+				
 				return nil
 			})
 		}
@@ -97,7 +125,7 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 		workerPool.Start()
 		workerPool.Wait()
 		wg.Wait()
-		multi.Stop()
+		area.Stop()
 	}
 }
 
