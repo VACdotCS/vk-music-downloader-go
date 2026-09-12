@@ -1,7 +1,10 @@
 package scenarios
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"path/filepath"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -32,8 +35,18 @@ func GetTrackByLinkScenario(savePath string, vkService *api.VkApiService) error 
 	mp3FilePath := filepath.Join(savePath, fileName)
 
 	dl := downloader.NewDownloader()
-	err = dl.ProcessStream(audioData.URL, tempFilePath, mp3FilePath, nil)
+	
+	// Контекст для отмены одиночной загрузки по Ctrl+C
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	err = dl.ProcessStream(ctx, audioData.URL, tempFilePath, mp3FilePath, nil)
 	if err != nil {
+		if ctx.Err() != nil {
+			spinner.Fail("Загрузка прервана пользователем")
+			cache.ClearTempFiles(savePath)
+			return err
+		}
 		_ = cache.CatchAudioStreamError(err, *audioData, fileName)
 		spinner.Fail("Ошибка скачивания")
 		return err

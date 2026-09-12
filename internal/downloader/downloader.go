@@ -2,6 +2,7 @@ package downloader
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/hex"
@@ -35,14 +36,21 @@ func NewDownloader() *Downloader {
 	}
 }
 
-func (d *Downloader) ParseM3U8(m3u8Url string) ([]Segment, error) {
-	resp, err := d.client.Get(m3u8Url)
+func (d *Downloader) doRequest(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := d.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
+}
 
-	data, err := io.ReadAll(resp.Body)
+func (d *Downloader) ParseM3U8(ctx context.Context, m3u8Url string) ([]Segment, error) {
+	data, err := d.doRequest(ctx, m3u8Url)
 	if err != nil {
 		return nil, err
 	}
@@ -101,23 +109,8 @@ func (d *Downloader) ParseM3U8(m3u8Url string) ([]Segment, error) {
 	return segments, nil
 }
 
-func (d *Downloader) fetchKey(keyUri string) ([]byte, error) {
-	resp, err := d.client.Get(keyUri)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
-}
-
-func (d *Downloader) downloadAndDecryptSegment(segmentUrl string, key []byte, iv []byte) ([]byte, error) {
-	resp, err := d.client.Get(segmentUrl)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	encryptedData, err := io.ReadAll(resp.Body)
+func (d *Downloader) downloadAndDecryptSegment(ctx context.Context, segmentUrl string, key []byte, iv []byte) ([]byte, error) {
+	encryptedData, err := d.doRequest(ctx, segmentUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +132,6 @@ func (d *Downloader) downloadAndDecryptSegment(segmentUrl string, key []byte, iv
 	decryptedData := make([]byte, len(encryptedData))
 	mode.CryptBlocks(decryptedData, encryptedData)
 
-	// Remove PKCS7 padding
 	paddingLen := int(decryptedData[len(decryptedData)-1])
 	if paddingLen > 0 && paddingLen <= aes.BlockSize {
 		decryptedData = decryptedData[:len(decryptedData)-paddingLen]
@@ -149,8 +141,8 @@ func (d *Downloader) downloadAndDecryptSegment(segmentUrl string, key []byte, iv
 }
 
 // ProcessStream скачивает и расшифровывает все сегменты, затем склеивает и вызывает FFmpeg
-func (d *Downloader) ProcessStream(m3u8Url, outputTsFile, outputMp3File string, progressCb func(float64)) error {
-	segments, err := d.ParseM3U8(m3u8Url)
+func (d *Downloader) ProcessStream(ctx context.Context, m3u8Url, outputTsFile, outputMp3File string, progressCb func(float64)) error {
+	segments, err := d.ParseM3U8(ctx, m3u8Url)
 	if err != nil {
 		return err
 	}
@@ -159,17 +151,23 @@ func (d *Downloader) ProcessStream(m3u8Url, outputTsFile, outputMp3File string, 
 	if err != nil {
 		return err
 	}
-
+	
 	total := len(segments)
 	for i, segment := range segments {
+		// Проверка отмены между кусками
+		if ctx.Err() != nil {
+			tsFile.Close()
+			return ctx.Err()
+		}
+
 		var key, iv []byte
 		if segment.Key != nil && segment.Key.Method == "AES-128" {
-			key, err = d.fetchKey(segment.Key.URI)
+			key, err = d.doRequest(ctx, segment.Key.URI)
 			if err != nil {
 				tsFile.Close()
 				return err
 			}
-
+			
 			if segment.Key.IV != "" {
 				ivHex := strings.TrimPrefix(segment.Key.IV, "0x")
 				iv, _ = hex.DecodeString(ivHex)
@@ -178,7 +176,7 @@ func (d *Downloader) ProcessStream(m3u8Url, outputTsFile, outputMp3File string, 
 			}
 		}
 
-		decryptedData, err := d.downloadAndDecryptSegment(segment.URL, key, iv)
+		decryptedData, err := d.downloadAndDecryptSegment(ctx, segment.URL, key, iv)
 		if err != nil {
 			tsFile.Close()
 			return err
@@ -196,8 +194,7 @@ func (d *Downloader) ProcessStream(m3u8Url, outputTsFile, outputMp3File string, 
 	}
 	tsFile.Close()
 
-	// Конвертация через FFmpeg
-	err = TsToMp3(outputTsFile, outputMp3File)
+	err = TsToMp3(ctx, outputTsFile, outputMp3File)
 	if err == nil {
 		_ = os.Remove(outputTsFile)
 	}
@@ -205,11 +202,14 @@ func (d *Downloader) ProcessStream(m3u8Url, outputTsFile, outputMp3File string, 
 	return err
 }
 
-func TsToMp3(inputTs, outputMp3 string) error {
-	cmd := exec.Command("ffmpeg", "-y", "-i", inputTs, "-acodec", "libmp3lame", "-f", "mp3", outputMp3)
+func TsToMp3(ctx context.Context, inputTs, outputMp3 string) error {
+	cmd := exec.CommandContext(ctx, "ffmpeg", "-y", "-i", inputTs, "-acodec", "libmp3lame", "-f", "mp3", outputMp3)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("ffmpeg error: %v, stderr: %s", err, stderr.String())
 	}
 	return nil

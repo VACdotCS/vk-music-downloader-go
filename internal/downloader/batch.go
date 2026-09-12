@@ -1,9 +1,12 @@
 package downloader
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -43,7 +46,18 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 	namingIndex := startNamingIndex
 	dl := NewDownloader()
 
+	// Перехватываем Ctrl+C (SIGINT) для gracefully остановки загрузки
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
 	for it := 0; it < iterationsCount; it++ {
+		// Проверяем, не была ли отменена загрузка пользователем
+		if ctx.Err() != nil {
+			pterm.Warning.Println("\nЗагрузка прервана пользователем (Ctrl+C). Очистка временных файлов...")
+			cache.ClearTempFiles(savePath)
+			return
+		}
+
 		start := it * batchSize
 		end := start + batchSize
 		if end > len(toDownload) {
@@ -67,7 +81,7 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 
 		done := make(chan struct{})
 		go func() {
-			ticker := time.NewTicker(150 * time.Millisecond) // Увеличиваем интервал (меньше нагрузка на консоль)
+			ticker := time.NewTicker(150 * time.Millisecond)
 			defer ticker.Stop()
 			
 			var lastContent string
@@ -101,7 +115,7 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 		var wg sync.WaitGroup
 
 		for i, audio := range batch {
-			audio := audio // capture loop variable
+			audio := audio
 			indexInBatch := i
 			currentIndex := namingIndex
 			namingIndex++
@@ -116,6 +130,14 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 			workerPool.AddTask(func() error {
 				defer wg.Done()
 
+				// Если контекст отменен до старта скачивания
+				if ctx.Err() != nil {
+					linesMu.Lock()
+					lines[indexInBatch] = pterm.Yellow("🛑 " + fmt.Sprintf("%d. Отменено: %s", currentIndex, fileName))
+					linesMu.Unlock()
+					return ctx.Err()
+				}
+
 				progressCb := func(percentage float64) {
 					progressStr := ui.RenderDownloaderProgress(percentage, utf8.RuneCountInString(taskTitle), maxTitleLength, 0)
 					
@@ -124,8 +146,16 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 					linesMu.Unlock()
 				}
 
-				err := dl.ProcessStream(audio.URL, tempFilePath, mp3FilePath, progressCb)
+				err := dl.ProcessStream(ctx, audio.URL, tempFilePath, mp3FilePath, progressCb)
 				if err != nil {
+					// Если ошибка из-за Ctrl+C
+					if ctx.Err() != nil {
+						linesMu.Lock()
+						lines[indexInBatch] = pterm.Yellow("🛑 " + fmt.Sprintf("%d. Прервано: %s", currentIndex, fileName))
+						linesMu.Unlock()
+						return err
+					}
+
 					_ = cache.CatchAudioStreamError(err, audio, fileName)
 					
 					linesMu.Lock()
@@ -152,6 +182,13 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 		
 		close(done)
 		writer.Stop()
+
+		// Если прервали, сразу выходим из глобального цикла батчей
+		if ctx.Err() != nil {
+			pterm.Warning.Println("\nЗагрузка прервана пользователем (Ctrl+C). Очистка временных файлов...")
+			cache.ClearTempFiles(savePath)
+			return
+		}
 	}
 }
 
