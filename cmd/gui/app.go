@@ -135,9 +135,7 @@ func (a *App) DownloadAllAudio() error {
 	a.downloadCancel = cancel
 	defer cancel()
 	
-	// Так как GetAllAudioScenario внутри вызывает DownloadBatchOfTracks без контекста,
-	// нам нужно прокинуть туда контекст. Но постойте, мы можем просто использовать
-	// api для получения списка треков прямо здесь!
+	// Получаем список всех треков пользователя
 	
 	audioList, err := vkService.GetAudiosList()
 	if err != nil {
