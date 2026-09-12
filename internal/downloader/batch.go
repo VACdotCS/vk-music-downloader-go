@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/pterm/pterm"
@@ -55,21 +56,32 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 		lines := make([]string, len(batch))
 		var linesMu sync.Mutex
 
-		updateDisplay := func() {
-			linesMu.Lock()
-			defer linesMu.Unlock()
-			area.Update(strings.Join(lines, "\n"))
-		}
-
 		for i, audio := range batch {
 			currentIndex := namingIndex + i
 			taskTitle := fmt.Sprintf("%d. Скачиваю: %s - %s", currentIndex, audio.Artist, audio.Title)
-			
-			linesMu.Lock()
 			lines[i] = "⏳ " + taskTitle
-			linesMu.Unlock()
 		}
-		updateDisplay()
+
+		// Эмулируем работу listr2 / Event Loop: 
+		// Отрисовываем терминал строго раз в 100мс, не позволяя воркерам спамить экран
+		done := make(chan struct{})
+		go func() {
+			ticker := time.NewTicker(100 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					linesMu.Lock()
+					area.Update(strings.Join(lines, "\n"))
+					linesMu.Unlock()
+				case <-done:
+					linesMu.Lock()
+					area.Update(strings.Join(lines, "\n"))
+					linesMu.Unlock()
+					return
+				}
+			}
+		}()
 
 		var wg sync.WaitGroup
 
@@ -95,7 +107,6 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 					linesMu.Lock()
 					lines[indexInBatch] = "🔄 " + taskTitle + " " + progressStr
 					linesMu.Unlock()
-					updateDisplay()
 				}
 
 				err := dl.ProcessStream(audio.URL, tempFilePath, mp3FilePath, progressCb)
@@ -105,7 +116,6 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 					linesMu.Lock()
 					lines[indexInBatch] = pterm.Red("❌ " + fmt.Sprintf("%d. Ошибка скачивания: %s - %s", currentIndex, audio.Artist, audio.Title))
 					linesMu.Unlock()
-					updateDisplay()
 					return err
 				}
 
@@ -116,7 +126,6 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 				linesMu.Lock()
 				lines[indexInBatch] = pterm.Green("✅ " + successTitle + " " + progressStr)
 				linesMu.Unlock()
-				updateDisplay()
 				
 				return nil
 			})
@@ -125,6 +134,8 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 		workerPool.Start()
 		workerPool.Wait()
 		wg.Wait()
+		
+		close(done)
 		area.Stop()
 	}
 }

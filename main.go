@@ -97,6 +97,14 @@ func checkToken() error {
 	if myConfig.Token == nil {
 		return nil
 	}
+	
+	// В JS, если `expires` отсутствует, он равен undefined.
+	// Сравнение (Date.now() >= undefined) даёт false. 
+	// В Go отсутствующее поле парсится как 0. Из-за этого токен "протухал" мгновенно.
+	if myConfig.Token.Expires <= 0 {
+		return nil
+	}
+
 	currentTime := time.Now().Unix()
 	if currentTime >= myConfig.Token.Expires {
 		pterm.Warning.Println("Токен истёк, нужен новый.")
