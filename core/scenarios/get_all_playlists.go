@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/pterm/pterm"
-	"vk-music-downloader-go/internal/api"
-	"vk-music-downloader-go/internal/downloader"
-	"vk-music-downloader-go/internal/utils"
+	"vk-music-downloader-go/core/api"
+	"vk-music-downloader-go/core/downloader"
+	"vk-music-downloader-go/core/utils"
 )
 
 func GetAllPlaylistsTracksScenario(savePath string, vkService *api.VkApiService) error {

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"vk-music-downloader-go/internal/api"
+	"vk-music-downloader-go/core/api"
 )
 
 func InitCache() {

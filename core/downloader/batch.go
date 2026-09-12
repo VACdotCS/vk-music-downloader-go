@@ -15,11 +15,11 @@ import (
 
 	"github.com/gosuri/uilive"
 	"github.com/pterm/pterm"
-	"vk-music-downloader-go/internal/api"
-	"vk-music-downloader-go/internal/cache"
-	"vk-music-downloader-go/internal/pool"
-	"vk-music-downloader-go/internal/ui"
-	"vk-music-downloader-go/internal/utils"
+	"vk-music-downloader-go/core/api"
+	"vk-music-downloader-go/core/cache"
+	"vk-music-downloader-go/core/pool"
+	"vk-music-downloader-go/core/ui"
+	"vk-music-downloader-go/core/utils"
 )
 
 func generateHash() string {

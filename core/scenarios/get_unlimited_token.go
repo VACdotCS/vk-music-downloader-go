@@ -8,7 +8,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/pterm/pterm"
-	"vk-music-downloader-go/internal/config"
+	"vk-music-downloader-go/core/config"
 )
 
 func GetUnlimitedTokenScenario(myConfig *config.Config) error {

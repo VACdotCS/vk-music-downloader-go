@@ -9,10 +9,10 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/pterm/pterm"
-	"vk-music-downloader-go/internal/api"
-	"vk-music-downloader-go/internal/cache"
-	"vk-music-downloader-go/internal/downloader"
-	"vk-music-downloader-go/internal/utils"
+	"vk-music-downloader-go/core/api"
+	"vk-music-downloader-go/core/cache"
+	"vk-music-downloader-go/core/downloader"
+	"vk-music-downloader-go/core/utils"
 )
 
 func GetTrackByLinkScenario(savePath string, vkService *api.VkApiService) error {

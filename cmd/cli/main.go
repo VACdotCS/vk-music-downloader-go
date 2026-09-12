@@ -13,11 +13,11 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/mattn/go-colorable"
 	"github.com/pterm/pterm"
-	"vk-music-downloader-go/internal/api"
-	"vk-music-downloader-go/internal/cache"
-	"vk-music-downloader-go/internal/config"
-	"vk-music-downloader-go/internal/ffmpeg"
-	"vk-music-downloader-go/internal/scenarios"
+	"vk-music-downloader-go/core/api"
+	"vk-music-downloader-go/core/cache"
+	"vk-music-downloader-go/core/config"
+	"vk-music-downloader-go/core/ffmpeg"
+	"vk-music-downloader-go/core/scenarios"
 )
 
 var (

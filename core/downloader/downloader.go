@@ -14,7 +14,7 @@ import (
 	"regexp"
 	"strings"
 
-	"vk-music-downloader-go/internal/ffmpeg"
+	"vk-music-downloader-go/core/ffmpeg"
 )
 
 type SegmentKey struct {
