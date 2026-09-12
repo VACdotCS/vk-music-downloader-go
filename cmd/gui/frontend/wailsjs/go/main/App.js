@@ -6,6 +6,10 @@ export function CancelDownload() {
   return window['go']['main']['App']['CancelDownload']();
 }
 
+export function CheckPlaylistLocalProgress(arg1) {
+  return window['go']['main']['App']['CheckPlaylistLocalProgress'](arg1);
+}
+
 export function ClearToken() {
   return window['go']['main']['App']['ClearToken']();
 }

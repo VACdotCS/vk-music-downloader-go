@@ -4,6 +4,8 @@ import {api} from '../models';
 
 export function CancelDownload():Promise<void>;
 
+export function CheckPlaylistLocalProgress(arg1:string):Promise<number>;
+
 export function ClearToken():Promise<void>;
 
 export function DownloadAllAudio():Promise<void>;

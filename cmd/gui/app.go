@@ -177,6 +177,9 @@ func (a *App) DownloadPlaylist(link string) error {
 	defer cancel()
 	
 	downloader.DownloadBatchOfTracks(ctx, tracks, a.config.SavePath, 1)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	return nil
 }
 
@@ -216,6 +219,9 @@ func (a *App) DownloadUserPlaylist(playlistID int, title string) error {
 	os.WriteFile(filepath.Join(savePath, fmt.Sprintf("%s-music-data.json", safeTitle)), jsonData, 0644)
 	
 	downloader.DownloadBatchOfTracks(ctx, tracks, savePath, 1)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	return nil
 }
 
@@ -240,6 +246,28 @@ func (a *App) OpenPlaylistFolder(title string) error {
 	return cmd.Start()
 }
 
+// CheckPlaylistLocalProgress возвращает количество скачанных mp3 файлов в папке плейлиста
+func (a *App) CheckPlaylistLocalProgress(title string) int {
+	safeTitle := title
+	invalidChars := []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*"}
+	for _, char := range invalidChars {
+		safeTitle = strings.ReplaceAll(safeTitle, char, "")
+	}
+	dir := filepath.Join(a.config.SavePath, safeTitle)
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	
+	count := 0
+	for _, f := range files {
+		if strings.HasSuffix(strings.ToLower(f.Name()), ".mp3") {
+			count++
+		}
+	}
+	return count
+}
+
 // DownloadAllAudio запускает скачивание всех сохраненных треков (не плейлистов)
 func (a *App) DownloadAllAudio() error {
 	a.initProgressCallback()
@@ -261,5 +289,8 @@ func (a *App) DownloadAllAudio() error {
 	}
 	
 	downloader.DownloadBatchOfTracks(ctx, audioList, a.config.SavePath, 1)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	return nil
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist, CancelDownload, ClearToken, GetUserPlaylists, DownloadUserPlaylist, OpenPlaylistFolder } from '../wailsjs/go/main/App';
+import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist, CancelDownload, ClearToken, GetUserPlaylists, DownloadUserPlaylist, OpenPlaylistFolder, CheckPlaylistLocalProgress } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import './App.css';
 
@@ -149,6 +149,20 @@ export default function App() {
       const pls = await GetUserPlaylists();
       setPlaylistsData(pls || []);
       playlistsDataRef.current = pls || [];
+      
+      const localProg: { [key: number]: number } = {};
+      for (const p of (pls || [])) {
+        if (p.count > 0) {
+          const localCount = await CheckPlaylistLocalProgress(p.title);
+          let percent = (localCount / p.count) * 100;
+          if (percent > 100) percent = 100;
+          localProg[p.id] = percent;
+        } else {
+          localProg[p.id] = 0;
+        }
+      }
+      setPlaylistProgresses(localProg);
+      
       setPlaylistsMode(true);
     } catch (e) {
       alert('Ошибка при получении плейлистов: ' + e);
