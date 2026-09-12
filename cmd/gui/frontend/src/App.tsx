@@ -66,7 +66,7 @@ export default function App() {
                const newP = p > 100 ? 100 : p;
                return { ...prevProg, [pid]: Math.max(oldP, newP) };
             });
-            setPlaylistErrors(prev => ({ ...prev, [pid]: errCount }));
+            setPlaylistErrors(prev => ({ ...prev, [pid]: Math.max(prev[pid] || 0, errCount) }));
           }
         }
         
@@ -230,7 +230,7 @@ export default function App() {
       setPlaylistProgresses(prev => ({...prev, [p.id]: newPercent > 100 ? 100 : newPercent}));
       setPlaylistErrors(prev => ({...prev, [p.id]: localProgress.errors}));
     } catch (e) {
-      //
+      console.error(e);
     }
     currentPlaylistIdRef.current = null;
     setActivePlaylistId(null);
