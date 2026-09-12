@@ -293,23 +293,19 @@ export default function App() {
               value={tokenInput}
               onChange={(e) => setTokenInput(e.target.value)}
               placeholder='{"data": {"access_token": "...", ...}}'
-              style={{ height: '120px', paddingRight: '2.5rem' }}
+              style={{ height: '120px' }}
             />
-            {tokenInput && (
-              <button
-                onClick={() => setTokenInput('')}
-                style={{
-                  position: 'absolute', top: '8px', right: '8px',
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  color: 'var(--text-secondary)', fontSize: '1.1rem', lineHeight: 1,
-                  padding: '2px 6px', borderRadius: '4px',
-                }}
-                title="Очистить"
-              >✕</button>
-            )}
           </div>
           <button className="btn-primary auth-btn" onClick={handleSaveToken}>
             Продолжить
+          </button>
+          <button
+            className="btn-secondary auth-btn"
+            onClick={() => setTokenInput('')}
+            disabled={!tokenInput}
+            style={{ marginTop: '0.5rem' }}
+          >
+            Очистить
           </button>
           
           <div className="auth-footer" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
