@@ -210,7 +210,13 @@ export default function App() {
     setIsPlaylistsDownloading(false);
   };
 
-  if (loading) return <div className="app-container"><div className="loader"></div></div>;
+  if (loading) return (
+    <div className="app-container" style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh'}}>
+      <div className="loader" style={{width: '64px', height: '64px', borderWidth: '6px'}}></div>
+      <h2 style={{marginTop: '1.5rem', fontWeight: 500, color: 'var(--text-main)'}}>Синхронизация...</h2>
+      <p style={{color: 'var(--text-secondary)'}}>Получаем данные от ВКонтакте</p>
+    </div>
+  );
 
   if (!hasToken) {
     return (
