@@ -9,13 +9,13 @@ import (
 	"vk-music-downloader-go/core/api"
 	"vk-music-downloader-go/core/config"
 	"vk-music-downloader-go/core/downloader"
-	"vk-music-downloader-go/core/scenarios"
 )
 
 // App struct
 type App struct {
-	ctx    context.Context
-	config *config.Config
+	ctx            context.Context
+	config         *config.Config
+	downloadCancel context.CancelFunc
 }
 
 // NewApp creates a new App application struct
@@ -28,6 +28,13 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	cfg, _ := config.LoadConfig()
 	a.config = cfg
+}
+
+// CancelDownload прерывает текущую загрузку
+func (a *App) CancelDownload() {
+	if a.downloadCancel != nil {
+		a.downloadCancel()
+	}
 }
 
 // HasValidToken проверяет, есть ли токен
@@ -92,7 +99,12 @@ func (a *App) DownloadTrack(link string) error {
 	if err != nil {
 		return err
 	}
-	downloader.DownloadBatchOfTracks(nil, []api.Audio{*audioData}, a.config.SavePath, 1)
+	
+	ctx, cancel := context.WithCancel(context.Background())
+	a.downloadCancel = cancel
+	defer cancel()
+	
+	downloader.DownloadBatchOfTracks(ctx, []api.Audio{*audioData}, a.config.SavePath, 1)
 	return nil
 }
 
@@ -106,7 +118,11 @@ func (a *App) DownloadPlaylist(link string) error {
 		return err
 	}
 	
-	downloader.DownloadBatchOfTracks(nil, tracks, a.config.SavePath, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	a.downloadCancel = cancel
+	defer cancel()
+	
+	downloader.DownloadBatchOfTracks(ctx, tracks, a.config.SavePath, 1)
 	return nil
 }
 
@@ -114,5 +130,24 @@ func (a *App) DownloadPlaylist(link string) error {
 func (a *App) DownloadAllAudio() error {
 	a.initProgressCallback()
 	vkService := api.NewVkApiService(a.config.Token.AccessToken, a.config.Token.UserID)
-	return scenarios.GetAllAudioScenario(a.config.SavePath, vkService)
+	
+	ctx, cancel := context.WithCancel(context.Background())
+	a.downloadCancel = cancel
+	defer cancel()
+	
+	// Так как GetAllAudioScenario внутри вызывает DownloadBatchOfTracks без контекста,
+	// нам нужно прокинуть туда контекст. Но постойте, мы можем просто использовать
+	// api для получения списка треков прямо здесь!
+	
+	audioList, err := vkService.GetAudiosList()
+	if err != nil {
+		return err
+	}
+
+	for i, j := 0, len(audioList)-1; i < j; i, j = i+1, j-1 {
+		audioList[i], audioList[j] = audioList[j], audioList[i]
+	}
+	
+	downloader.DownloadBatchOfTracks(ctx, audioList, a.config.SavePath, 1)
+	return nil
 }

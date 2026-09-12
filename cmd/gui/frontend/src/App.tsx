@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist } from '../wailsjs/go/main/App';
+import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist, CancelDownload } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import './App.css';
 
@@ -77,8 +77,8 @@ export default function App() {
     }
   };
 
-  const cancelDownload = () => {
-    // В реальном приложении тут нужен сигнал отмены в Go. Пока просто скрываем экран.
+  const cancelDownload = async () => {
+    await CancelDownload();
     setIsDownloading(false);
   }
 
