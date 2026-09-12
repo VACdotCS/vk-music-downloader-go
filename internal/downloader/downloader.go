@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -202,8 +203,17 @@ func (d *Downloader) ProcessStream(ctx context.Context, m3u8Url, outputTsFile, o
 	return err
 }
 
+func getFfmpegPath() string {
+	exePath, _ := os.Executable()
+	localFfmpeg := filepath.Join(filepath.Dir(exePath), "ffmpeg.exe")
+	if _, err := os.Stat(localFfmpeg); err == nil {
+		return localFfmpeg
+	}
+	return "ffmpeg"
+}
+
 func TsToMp3(ctx context.Context, inputTs, outputMp3 string) error {
-	cmd := exec.CommandContext(ctx, "ffmpeg", "-y", "-i", inputTs, "-acodec", "libmp3lame", "-f", "mp3", outputMp3)
+	cmd := exec.CommandContext(ctx, getFfmpegPath(), "-y", "-i", inputTs, "-acodec", "libmp3lame", "-f", "mp3", outputMp3)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

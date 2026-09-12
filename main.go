@@ -12,6 +12,7 @@ import (
 	"vk-music-downloader-go/internal/api"
 	"vk-music-downloader-go/internal/cache"
 	"vk-music-downloader-go/internal/config"
+	"vk-music-downloader-go/internal/ffmpeg"
 	"vk-music-downloader-go/internal/scenarios"
 )
 
@@ -37,6 +38,14 @@ func main() {
 		initVkService()
 	}
 
+	// 3. Проверка FFmpeg (скачивание при необходимости)
+	err = ffmpeg.CheckAndDownload()
+	if err != nil {
+		pterm.Error.Println("Критическая ошибка: невозможно установить FFmpeg. Конвертация треков может не работать.")
+		fmt.Println("Попробуйте установить его вручную.")
+	}
+
+	// 4. Папка сохранения
 	if myConfig.SavePath == "" {
 		if err := getSaveFolder(); err != nil {
 			return
