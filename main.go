@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -76,13 +79,41 @@ func authorInfo() {
 	fmt.Println()
 }
 
+func openBrowserURL(url string) {
+	var err error
+	switch runtime.GOOS {
+	case "linux":
+		err = exec.Command("xdg-open", url).Start()
+	case "windows":
+		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	case "darwin":
+		err = exec.Command("open", url).Start()
+	default:
+		err = fmt.Errorf("unsupported platform")
+	}
+	if err != nil {
+		pterm.Warning.Printf("Не удалось автоматически открыть браузер. Перейдите по ссылке вручную: %s\n", url)
+	}
+}
+
 func getAccessTokenData() error {
 	prompt := &survey.Input{
-		Message: "Введите свой access token (JSON объект, скопированный по гайду по ссылке выше):",
+		Message: "Введите свой access token (JSON объект), или введите 'help' для открытия гайда в браузере:",
 	}
 	var dataStr string
-	if err := survey.AskOne(prompt, &dataStr); err != nil {
-		return err
+	
+	for {
+		if err := survey.AskOne(prompt, &dataStr); err != nil {
+			return err
+		}
+
+		if strings.ToLower(strings.TrimSpace(dataStr)) == "help" {
+			pterm.Info.Println("Открываем гайд в браузере...")
+			openBrowserURL("https://github.com/VACdotCS/vk-music-downloader")
+			continue
+		}
+		
+		break
 	}
 
 	var tokenJson struct {
