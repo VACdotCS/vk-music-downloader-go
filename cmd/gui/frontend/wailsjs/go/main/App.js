@@ -30,6 +30,14 @@ export function HasValidToken() {
   return window['go']['main']['App']['HasValidToken']();
 }
 
+export function OpenAuthPage() {
+  return window['go']['main']['App']['OpenAuthPage']();
+}
+
+export function ParseAndSaveUrlToken(arg1) {
+  return window['go']['main']['App']['ParseAndSaveUrlToken'](arg1);
+}
+
 export function SaveToken(arg1) {
   return window['go']['main']['App']['SaveToken'](arg1);
 }
