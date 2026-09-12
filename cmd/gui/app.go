@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -206,6 +207,11 @@ func (a *App) DownloadUserPlaylist(playlistID int, title string) error {
 	
 	// Путь сохранения: базовая папка + имя плейлиста
 	savePath := filepath.Join(a.config.SavePath, safeTitle)
+	os.MkdirAll(savePath, 0755)
+
+	// Сохраняем метаданные плейлиста в json
+	jsonData, _ := json.MarshalIndent(tracks, "", "  ")
+	os.WriteFile(filepath.Join(savePath, fmt.Sprintf("%s-music-data.json", safeTitle)), jsonData, 0644)
 	
 	downloader.DownloadBatchOfTracks(ctx, tracks, savePath, 1)
 	return nil

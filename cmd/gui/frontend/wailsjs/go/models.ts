@@ -22,6 +22,7 @@ export namespace api {
 	    title: string;
 	    count: number;
 	    thumb?: PlaylistThumb;
+	    photo?: PlaylistThumb;
 	
 	    static createFrom(source: any = {}) {
 	        return new Playlist(source);
@@ -34,6 +35,7 @@ export namespace api {
 	        this.title = source["title"];
 	        this.count = source["count"];
 	        this.thumb = this.convertValues(source["thumb"], PlaylistThumb);
+	        this.photo = this.convertValues(source["photo"], PlaylistThumb);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

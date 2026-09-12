@@ -279,7 +279,8 @@ export default function App() {
         <div className="playlists-grid">
           {playlistsData.map(p => {
             const prog = playlistProgresses[p.id] || 0;
-            const thumbUrl = p.thumb?.photo_300 || p.thumb?.photo_600 || p.thumb?.photo_68 || '';
+            const thumbUrl = p.photo?.photo_300 || p.photo?.photo_600 || p.photo?.photo_68 || 
+                             p.thumb?.photo_300 || p.thumb?.photo_600 || p.thumb?.photo_68 || '';
             
             return (
               <div key={p.id} className="playlist-card" onClick={() => downloadSinglePlaylist(p)}>

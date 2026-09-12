@@ -21,6 +21,7 @@ type Playlist struct {
 	Title   string         `json:"title"`
 	Count   int            `json:"count"`
 	Thumb   *PlaylistThumb `json:"thumb,omitempty"`
+	Photo   *PlaylistThumb `json:"photo,omitempty"`
 }
 
 type VkAudioResponse struct {
