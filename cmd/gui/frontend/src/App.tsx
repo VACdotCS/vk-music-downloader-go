@@ -52,19 +52,20 @@ export default function App() {
               const item = newLog[key];
               if (item.status === 'done') {
                 successFraction += 1;
-              } else if (item.status === 'error' || item.status === 'error-token') {
-                if (item.status === 'error') errCount += 1;
-              } else {
+              } else if (item.status === 'error') {
+                errCount += 1;
+                // Ошибочный трек тоже "завершён" — двигаем общий прогресс
+              } else if (item.status !== 'error-token') {
                 successFraction += (item.percentage || 0);
               }
             }
             
-            const p = (successFraction / pData.count) * 100;
-            // Чтобы не было скачков вниз из-за того, что batch.go еще не прислал 'done' для старых треков:
+            const safeCount = pData.count || 1;
+            // Синяя часть = успешные треки
+            const successP = Math.min((successFraction / safeCount) * 100, 100);
             setPlaylistProgresses(prevProg => {
                const oldP = prevProg[pid] || 0;
-               const newP = p > 100 ? 100 : p;
-               return { ...prevProg, [pid]: Math.max(oldP, newP) };
+               return { ...prevProg, [pid]: Math.max(oldP, successP) };
             });
             setPlaylistErrors(prev => ({ ...prev, [pid]: Math.max(prev[pid] || 0, errCount) }));
           }
