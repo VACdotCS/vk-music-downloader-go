@@ -147,6 +147,7 @@ func mainMenu() bool {
 		"⚙️ Показать путь для скачивания",
 		"⚙️ Изменить путь для скачивания",
 		"⚙️ Вывести путь к приложению",
+		"⚙️ Показать путь установки FFmpeg",
 		"⚙️ Очистить весь кэш (удалит всё, кроме пути сохранения треков)",
 		"⚙️ Вывести заблокированные треки",
 		"⚙️ Получить бесконечный токен",
@@ -180,19 +181,22 @@ func mainMenu() bool {
 		dir, _ := os.Getwd()
 		fmt.Printf("Путь: %s\n", dir)
 	case choices[7]:
-		cache.ClearCache()
+		ffmpegPath := ffmpeg.GetPath()
+		pterm.Info.Printf("FFmpeg используется по пути: %s\n", ffmpegPath)
 	case choices[8]:
-		cache.OutputBlockedTracks()
+		cache.ClearCache()
 	case choices[9]:
+		cache.OutputBlockedTracks()
+	case choices[10]:
 		if err := scenarios.GetUnlimitedTokenScenario(myConfig); err == nil {
 			initVkService()
 		}
-	case choices[10]:
+	case choices[11]:
 		cache.ClearTempFiles(myConfig.SavePath)
 		pterm.Info.Println("До свидания!")
 		return false
 	default:
-		pterm.Warning.Println("Эта функция пока не перенесена на Go-версию.")
+		pterm.Warning.Println("Неизвестный пункт меню.")
 	}
 
 	fmt.Println()

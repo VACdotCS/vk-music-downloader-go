@@ -15,6 +15,16 @@ import (
 
 const ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
 
+// GetPath возвращает путь к локальному или системному FFmpeg
+func GetPath() string {
+	exePath, _ := os.Executable()
+	localFfmpeg := filepath.Join(filepath.Dir(exePath), "ffmpeg.exe")
+	if _, err := os.Stat(localFfmpeg); err == nil {
+		return localFfmpeg
+	}
+	return "ffmpeg"
+}
+
 // CheckAndDownload проверяет наличие ffmpeg. Если его нет, скачивает и устанавливает локально.
 func CheckAndDownload() error {
 	_, err := exec.LookPath("ffmpeg")
