@@ -10,8 +10,8 @@ import (
 
 func init() {
 	// Принудительно включаем кодировку UTF-8 (чтобы эмодзи не превращались в кракозябры/вопросики)
-	windows.SetConsoleOutputCP(windows.CP_UTF8)
-	windows.SetConsoleCP(windows.CP_UTF8)
+	windows.SetConsoleOutputCP(65001)
+	windows.SetConsoleCP(65001)
 
 	// Включаем поддержку ANSI (виртуальный терминал) для корректного отображения цветов и прогресс-баров
 	stdout := windows.Handle(os.Stdout.Fd())
