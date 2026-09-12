@@ -1,0 +1,46 @@
+version: '3'
+
+vars:
+  APP_NAME_WIN: vk-music-downloader-windows-amd64.exe
+  APP_NAME_LINUX: vk-music-downloader-linux-amd64
+  BUILD_DIR: release
+  LDFLAGS: -s -w
+
+tasks:
+  build:
+    desc: "Сборка обычного бинарника под вашу ОС"
+    cmds:
+      - go build -ldflags="{{.LDFLAGS}}" -o vk-music-downloader.exe main.go
+
+  release:
+    desc: "Сборка релизных бинарников под Windows и Linux"
+    cmds:
+      - task: clean
+      - mkdir -p {{.BUILD_DIR}}
+      - cmd: go build -ldflags="{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.APP_NAME_WIN}} main.go
+        env:
+          GOOS: windows
+          GOARCH: amd64
+      - cmd: go build -ldflags="{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.APP_NAME_LINUX}} main.go
+        env:
+          GOOS: linux
+          GOARCH: amd64
+      - echo "✅ Релизные бинарники успешно собраны в папке {{.BUILD_DIR}}/"
+
+  clean:
+    desc: "Очистка скомпилированных файлов и кэша"
+    cmds:
+      - rm -rf {{.BUILD_DIR}}
+      - rm -f vk-music-downloader.exe
+      - rm -f config.json errors.json temp-*.ts *-music-data.json
+    ignore_error: true
+
+  run:
+    desc: "Быстрый запуск без явной компиляции"
+    cmds:
+      - go run main.go
+
+  tidy:
+    desc: "Обновление и подтяжка зависимостей"
+    cmds:
+      - go mod tidy
