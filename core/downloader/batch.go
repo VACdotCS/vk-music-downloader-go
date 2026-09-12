@@ -144,6 +144,10 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 					linesMu.Lock()
 					lines[indexInBatch] = "🔄 " + taskTitle + " " + progressStr
 					linesMu.Unlock()
+					
+					if GUIProgressCallback != nil {
+						GUIProgressCallback(currentIndex, fileName, percentage, "downloading")
+					}
 				}
 
 				err := dl.ProcessStream(ctx, audio.URL, tempFilePath, mp3FilePath, progressCb)
@@ -191,6 +195,11 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 		}
 	}
 }
+
+var (
+	// GUIProgressCallback используется для прокидывания прогресса во фронтенд Wails
+	GUIProgressCallback func(index int, title string, percentage float64, status string)
+)
 
 func mathAbs(x int) int {
 	if x < 0 {

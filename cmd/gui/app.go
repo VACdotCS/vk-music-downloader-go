@@ -6,7 +6,10 @@ import (
 	"fmt"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"vk-music-downloader-go/core/api"
 	"vk-music-downloader-go/core/config"
+	"vk-music-downloader-go/core/downloader"
+	"vk-music-downloader-go/core/scenarios"
 )
 
 // App struct
@@ -67,4 +70,23 @@ func (a *App) GetSavePath() string {
 		return ""
 	}
 	return a.config.SavePath
+}
+
+// initProgressCallback привязывает вызов Wails к загрузчику
+func (a *App) initProgressCallback() {
+	downloader.GUIProgressCallback = func(index int, title string, percentage float64, status string) {
+		runtime.EventsEmit(a.ctx, "download-progress", map[string]interface{}{
+			"index":      index,
+			"title":      title,
+			"percentage": percentage,
+			"status":     status,
+		})
+	}
+}
+
+// DownloadAllAudio запускает сценарий скачивания всей музыки
+func (a *App) DownloadAllAudio() error {
+	a.initProgressCallback()
+	vkService := api.NewVkApiService(a.config.Token.AccessToken, a.config.Token.UserID)
+	return scenarios.GetAllAudioScenario(a.config.SavePath, vkService)
 }
