@@ -71,13 +71,14 @@ func main() {
 func authorInfo() {
 	pterm.DefaultHeader.WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgCyan)).Println("CLI VK Audio Downloader (Golang Port)")
 	pterm.Info.Println("Автор оригинала: Vladimir Taburkin")
-	pterm.Info.Println("Гитхаб оригинала: https://github.com/VACdotCS")
+	pterm.Info.Println("Гайд по получению токена и Гитхаб оригинала:")
+	pterm.Info.Println("👉 https://github.com/VACdotCS/vk-music-downloader")
 	fmt.Println()
 }
 
 func getAccessTokenData() error {
 	prompt := &survey.Input{
-		Message: "Введите свой access token (JSON объект, скопированный по гайду):",
+		Message: "Введите свой access token (JSON объект, скопированный по гайду по ссылке выше):",
 	}
 	var dataStr string
 	if err := survey.AskOne(prompt, &dataStr); err != nil {
