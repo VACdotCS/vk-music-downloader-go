@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"syscall"
 
 	"vk-music-downloader-go/core/ffmpeg"
 )
@@ -44,7 +45,7 @@ func (d *Downloader) doRequest(ctx context.Context, url string) ([]byte, error) 
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "KateMobileAndroid/56 lite-460 (Android 4.4.2; SDK 19; x86; unknown Android SDK built for x86; en)")
-	
+
 	resp, err := d.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -155,7 +156,7 @@ func (d *Downloader) ProcessStream(ctx context.Context, m3u8Url, outputTsFile, o
 	if err != nil {
 		return err
 	}
-	
+
 	total := len(segments)
 	for i, segment := range segments {
 		// Проверка отмены между кусками
@@ -171,7 +172,7 @@ func (d *Downloader) ProcessStream(ctx context.Context, m3u8Url, outputTsFile, o
 				tsFile.Close()
 				return err
 			}
-			
+
 			if segment.Key.IV != "" {
 				ivHex := strings.TrimPrefix(segment.Key.IV, "0x")
 				iv, _ = hex.DecodeString(ivHex)
@@ -208,6 +209,11 @@ func (d *Downloader) ProcessStream(ctx context.Context, m3u8Url, outputTsFile, o
 
 func TsToMp3(ctx context.Context, inputTs, outputMp3 string) error {
 	cmd := exec.CommandContext(ctx, ffmpeg.GetPath(), "-y", "-i", inputTs, "-acodec", "libmp3lame", "-f", "mp3", outputMp3)
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow: true,
+	}
+
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
