@@ -17,7 +17,7 @@ A fast, fully standalone CLI utility for downloading music and playlists from VK
 * **Graceful Interruption**: Pressing `Ctrl+C` instantly aborts the current download tasks, cleans up temporary files, and returns you safely to the main menu without killing the app.
 
 ### 🚀 Usage
-1. Download the latest `vk-music-downloader.exe`.
+1. Download the latest compiled executable for your OS (Windows `.exe` or Linux binary) from the [Releases page](https://github.com/VACdotCS/vk-music-downloader-go/releases/latest).
 2. Run the executable in your terminal:
    ```cmd
    .\vk-music-downloader.exe
@@ -51,7 +51,7 @@ go build -o vk-music-downloader.exe main.go
 * **Безопасная отмена**: Нажатие `Ctrl+C` мгновенно прерывает текущие загрузки, подчищает за собой временные файлы и возвращает вас в главное меню, не убивая саму программу.
 
 ### 🚀 Использование
-1. Скачайте свежий `vk-music-downloader.exe`.
+1. Скачайте свежий исполняемый файл для вашей ОС (Windows `.exe` или бинарник для Linux) со страницы [Релизов (Releases)](https://github.com/VACdotCS/vk-music-downloader-go/releases/latest).
 2. Запустите его в терминале:
    ```cmd
    .\vk-music-downloader.exe
