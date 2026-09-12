@@ -184,42 +184,48 @@ export default function App() {
     setLoading(false);
   };
 
-  const cancelPlaylistsDownload = async () => {
-    await CancelDownload();
+  const cancelPlaylistsDownload = () => {
+    // Сбрасываем UI мгновенно — не ждём Go
     currentPlaylistIdRef.current = null;
     setActivePlaylistId(null);
     setIsPlaylistsDownloading(false);
+    // Асинхронно говорим Go прекратить скачивание
+    CancelDownload().catch(console.error);
   };
 
   const startPlaylistsDownload = async () => {
     setIsPlaylistsDownloading(true);
-    for (const p of playlistsData) {
-      const prog = playlistProgresses[p.id] || 0;
-      const errs = playlistErrors[p.id] || 0;
-      const totalProg = prog + (errs / p.count) * 100;
-      if (totalProg >= 99.9) continue; // skip already downloaded (including known errors)
-      
-      setActivePlaylistId(p.id);
-      currentPlaylistIdRef.current = p.id;
-      setPlaylistErrors(prev => ({...prev, [p.id]: 0}));
-      setProgressLog({});
-      try {
-        await DownloadUserPlaylist(p.id, p.title);
-        setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
-        const localProgress = await CheckPlaylistLocalProgress(p.title);
-        setPlaylistErrors(prev => ({...prev, [p.id]: localProgress.errors}));
-        if (localProgress.errors > 0) {
-          const safeCount = p.count || 1;
-          const okPercent = Math.min((localProgress.downloaded / safeCount) * 100, 100);
-          setPlaylistProgresses(prev => ({...prev, [p.id]: okPercent}));
+    try {
+      for (const p of playlistsData) {
+        const prog = playlistProgresses[p.id] || 0;
+        const errs = playlistErrors[p.id] || 0;
+        const safeCount = p.count || 1;
+        const totalProg = prog + (errs / safeCount) * 100;
+        if (totalProg >= 99.9) continue;
+        
+        setActivePlaylistId(p.id);
+        currentPlaylistIdRef.current = p.id;
+        setPlaylistErrors(prev => ({...prev, [p.id]: 0}));
+        setProgressLog({});
+        try {
+          await DownloadUserPlaylist(p.id, p.title);
+          setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
+          const localProgress = await CheckPlaylistLocalProgress(p.title);
+          setPlaylistErrors(prev => ({...prev, [p.id]: localProgress.errors}));
+          if (localProgress.errors > 0) {
+            const okPercent = Math.min((localProgress.downloaded / safeCount) * 100, 100);
+            setPlaylistProgresses(prev => ({...prev, [p.id]: okPercent}));
+          }
+        } catch (e) {
+          console.error('Playlist download error:', e);
+          break;
         }
-      } catch (e) {
-        break; // Ошибка токена или отмена прервет цикл
       }
+    } finally {
+      currentPlaylistIdRef.current = null;
+      setActivePlaylistId(null);
+      setIsPlaylistsDownloading(false);
     }
-    currentPlaylistIdRef.current = null;
-    setActivePlaylistId(null);
-    setIsPlaylistsDownloading(false);
   };
 
   const downloadSinglePlaylist = async (p: any) => {
@@ -371,8 +377,9 @@ export default function App() {
           {playlistsData.map(p => {
             const prog = playlistProgresses[p.id] || 0;
             const errCount = playlistErrors[p.id] || 0;
-            const errProg = (errCount / p.count) * 100;
-            const totalProg = prog + errProg;
+            const safeCount = p.count || 1;
+            const errProg = (errCount / safeCount) * 100;
+            const totalProg = isNaN(prog + errProg) ? 0 : (prog + errProg);
             const thumbUrl = p.photo?.photo_300 || p.photo?.photo_600 || p.photo?.photo_68 || 
                              p.thumb?.photo_300 || p.thumb?.photo_600 || p.thumb?.photo_68 || '';
             
