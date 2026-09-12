@@ -109,7 +109,7 @@ export default function App() {
     setProgressLog({});
     try {
       await fn();
-      setTimeout(() => alert('Скачивание завершено!'), 500);
+      // Скачивание завершено, пользователь сам увидит статус "done"
     } catch (e) {
       const errStr = String(e);
       if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
@@ -165,7 +165,6 @@ export default function App() {
       }
     }
     currentPlaylistIdRef.current = null;
-    alert("Скачивание плейлистов завершено!");
   };
 
   const downloadSinglePlaylist = async (p: any) => {
@@ -175,7 +174,6 @@ export default function App() {
     try {
       await DownloadUserPlaylist(p.id, p.title);
       setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
-      alert("Плейлист скачан!");
     } catch (e) {
       //
     }
