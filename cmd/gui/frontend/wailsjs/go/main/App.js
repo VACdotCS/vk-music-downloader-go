@@ -6,6 +6,10 @@ export function CancelDownload() {
   return window['go']['main']['App']['CancelDownload']();
 }
 
+export function ClearToken() {
+  return window['go']['main']['App']['ClearToken']();
+}
+
 export function DownloadAllAudio() {
   return window['go']['main']['App']['DownloadAllAudio']();
 }

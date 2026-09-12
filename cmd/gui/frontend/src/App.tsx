@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist, CancelDownload } from '../wailsjs/go/main/App';
+import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist, CancelDownload, ClearToken } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import './App.css';
 
@@ -81,6 +81,11 @@ export default function App() {
     await CancelDownload();
     setIsDownloading(false);
   }
+
+  const handleLogout = async () => {
+    await ClearToken();
+    checkToken();
+  };
 
   if (loading) return <div className="app-container"><div className="loader"></div></div>;
 
@@ -171,6 +176,9 @@ export default function App() {
           <div className="brand-icon"><IconMusic /></div>
           <h2>VK Music</h2>
         </div>
+        <button className="btn-secondary btn-sm" onClick={handleLogout} title="Сменить токен">
+          Выйти
+        </button>
       </div>
       
       <div className="dashboard-grid">

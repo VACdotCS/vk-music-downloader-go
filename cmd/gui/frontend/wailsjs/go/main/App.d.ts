@@ -3,6 +3,8 @@
 
 export function CancelDownload():Promise<void>;
 
+export function ClearToken():Promise<void>;
+
 export function DownloadAllAudio():Promise<void>;
 
 export function DownloadPlaylist(arg1:string):Promise<void>;

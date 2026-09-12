@@ -57,6 +57,14 @@ func (a *App) SaveToken(dataStr string) error {
 	return nil
 }
 
+// ClearToken удаляет текущий токен (Logout)
+func (a *App) ClearToken() {
+	if a.config != nil {
+		a.config.Token = nil
+		config.SaveConfig(a.config)
+	}
+}
+
 // SelectDirectory открывает диалог выбора папки
 func (a *App) SelectDirectory() string {
 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
