@@ -217,6 +217,12 @@ export default function App() {
             setPlaylistProgresses(prev => ({...prev, [p.id]: okPercent}));
           }
         } catch (e) {
+          const errStr = String(e);
+          if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
+            await ClearToken();
+            checkToken();
+            return; // выходим из всей функции, finally не нужен — страница перерисуется
+          }
           console.error('Playlist download error:', e);
           break;
         }
@@ -248,6 +254,12 @@ export default function App() {
         setPlaylistProgresses(prev => ({...prev, [p.id]: okPercent}));
       }
     } catch (e) {
+      const errStr = String(e);
+      if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
+        await ClearToken();
+        checkToken();
+        return; // выходим раньше finally — checkToken() сам перекинет на экран логина
+      }
       console.error(e);
     } finally {
       currentPlaylistIdRef.current = null;
