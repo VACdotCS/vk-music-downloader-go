@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"vk-music-downloader-go/core/api"
@@ -42,7 +43,7 @@ func (a *App) HasValidToken() bool {
 	return a.config != nil && a.config.Token != nil
 }
 
-// SaveToken сохраняет токен из строки
+// SaveToken сохраняет токен из JSON строки (Kate Mobile)
 func (a *App) SaveToken(dataStr string) error {
 	var tokenJson struct {
 		Data *config.Token `json:"data"`
@@ -55,6 +56,47 @@ func (a *App) SaveToken(dataStr string) error {
 	a.config.Token = tokenJson.Data
 	config.SaveConfig(a.config)
 	return nil
+}
+
+// ParseAndSaveUrlToken парсит ссылку из адресной строки (OAuth)
+func (a *App) ParseAndSaveUrlToken(tokenLink string) error {
+	parts := strings.Split(tokenLink, "#")
+	if len(parts) < 2 {
+		return fmt.Errorf("неверный формат ссылки")
+	}
+
+	res := make(map[string]string)
+	params := strings.Split(parts[1], "&")
+	for _, p := range params {
+		kv := strings.Split(p, "=")
+		if len(kv) == 2 {
+			res[kv[0]] = kv[1]
+		}
+	}
+
+	accessToken := res["access_token"]
+	if accessToken == "" {
+		return fmt.Errorf("токен не найден в ссылке")
+	}
+
+	// userID не всегда нужен, но попробуем спарсить
+	var userID int
+	if uid, ok := res["user_id"]; ok {
+		fmt.Sscanf(uid, "%d", &userID)
+	}
+
+	a.config.Token = &config.Token{
+		AccessToken: accessToken,
+		UserID:      userID,
+	}
+	config.SaveConfig(a.config)
+	return nil
+}
+
+// OpenAuthPage открывает страницу получения токена в браузере
+func (a *App) OpenAuthPage() {
+	url := "https://oauth.vk.com/authorize?client_id=6463690&scope=1073737727&redirect_uri=https://oauth.vk.com/blank.html&display=page&response_type=token&revoke=1"
+	runtime.BrowserOpenURL(a.ctx, url)
 }
 
 // ClearToken удаляет текущий токен (Logout)

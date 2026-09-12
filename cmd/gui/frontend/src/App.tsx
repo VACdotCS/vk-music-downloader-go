@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist, CancelDownload, ClearToken } from '../wailsjs/go/main/App';
+import { HasValidToken, SaveToken, ParseAndSaveUrlToken, OpenAuthPage, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist, CancelDownload, ClearToken } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import './App.css';
 
@@ -15,6 +15,8 @@ export default function App() {
   const [hasToken, setHasToken] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tokenInput, setTokenInput] = useState('');
+  const [authMode, setAuthMode] = useState<'url' | 'json'>('url');
+  
   const [savePath, setSavePath] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
   const [progressLog, setProgressLog] = useState<{ [key: number]: any }>({});
@@ -29,6 +31,16 @@ export default function App() {
     checkToken();
     EventsOn('download-progress', (data) => {
       setProgressLog((prev) => ({ ...prev, [data.index]: data }));
+      
+      // Авто-логаут при протухании токена (400 ошибки)
+      if (data.status === 'error-token') {
+        alert("Токен или ссылки устарели (Ошибка 400). Пожалуйста, получите новый токен!");
+        CancelDownload().then(() => {
+          ClearToken().then(() => {
+            window.location.reload();
+          });
+        });
+      }
     });
   }, []);
 
@@ -50,10 +62,14 @@ export default function App() {
 
   const handleSaveToken = async () => {
     try {
-      await SaveToken(tokenInput);
+      if (authMode === 'json') {
+        await SaveToken(tokenInput);
+      } else {
+        await ParseAndSaveUrlToken(tokenInput);
+      }
       checkToken();
     } catch (e) {
-      alert('Ошибка: Неверный формат токена. Ожидался JSON.');
+      alert('Ошибка: ' + e);
     }
   };
 
@@ -71,7 +87,7 @@ export default function App() {
     setProgressLog({});
     try {
       await fn();
-      setTimeout(() => alert('Скачивание успешно завершено!'), 500);
+      setTimeout(() => alert('Скачивание завершено!'), 500);
     } catch (e) {
       alert('Ошибка: ' + e);
     }
@@ -95,19 +111,34 @@ export default function App() {
         <div className="card auth-card">
           <div className="auth-icon"><IconMusic /></div>
           <h1>Вход в VK Music</h1>
-          <p className="subtitle">Для начала работы вставьте ваш access_token</p>
+          <p className="subtitle">
+            {authMode === 'url' 
+              ? 'Нажмите кнопку ниже, разрешите доступ и скопируйте ссылку из адресной строки:'
+              : 'Вставьте JSON-объект с вашим access_token из ВК:'}
+          </p>
+          
+          {authMode === 'url' && (
+            <button className="btn-secondary w-full" onClick={OpenAuthPage} style={{ marginBottom: '1rem' }}>
+              1. Получить ссылку авторизации
+            </button>
+          )}
+
           <textarea
             className="modern-input"
             value={tokenInput}
             onChange={(e) => setTokenInput(e.target.value)}
-            placeholder='{"data": {"access_token": "...", ...}}'
+            placeholder={authMode === 'url' ? 'https://oauth.vk.com/blank.html#access_token=...' : '{"data": {"access_token": "...", ...}}'}
+            style={{ height: authMode === 'url' ? '80px' : '120px' }}
           />
           <button className="btn-primary auth-btn" onClick={handleSaveToken}>
-            Продолжить
+            2. Продолжить
           </button>
-          <p className="help-text">
-            Не знаете, как получить токен? Прочитайте <a href="#" onClick={(e) => { e.preventDefault(); alert("Инструкция на GitHub: https://github.com/VACdotCS/vk-music-downloader")}}>гайд на GitHub</a>.
-          </p>
+          
+          <div className="auth-footer" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
+            <a href="#" onClick={(e) => { e.preventDefault(); setAuthMode(authMode === 'url' ? 'json' : 'url'); setTokenInput(''); }}>
+              {authMode === 'url' ? 'Ввести JSON (из Kate Mobile)' : 'Получить токен по ссылке'}
+            </a>
+          </div>
         </div>
       </div>
     );
