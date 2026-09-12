@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	stdruntime "runtime"
 	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -215,6 +217,27 @@ func (a *App) DownloadUserPlaylist(playlistID int, title string) error {
 	
 	downloader.DownloadBatchOfTracks(ctx, tracks, savePath, 1)
 	return nil
+}
+
+// OpenPlaylistFolder открывает папку со скачанным плейлистом
+func (a *App) OpenPlaylistFolder(title string) error {
+	safeTitle := title
+	invalidChars := []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*"}
+	for _, char := range invalidChars {
+		safeTitle = strings.ReplaceAll(safeTitle, char, "")
+	}
+	savePath := filepath.Join(a.config.SavePath, safeTitle)
+
+	var cmd *exec.Cmd
+	switch stdruntime.GOOS {
+	case "windows":
+		cmd = exec.Command("explorer", savePath)
+	case "darwin":
+		cmd = exec.Command("open", savePath)
+	default: // linux
+		cmd = exec.Command("xdg-open", savePath)
+	}
+	return cmd.Start()
 }
 
 // DownloadAllAudio запускает скачивание всех сохраненных треков (не плейлистов)

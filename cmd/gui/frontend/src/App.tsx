@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist, CancelDownload, ClearToken, GetUserPlaylists, DownloadUserPlaylist } from '../wailsjs/go/main/App';
+import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist, CancelDownload, ClearToken, GetUserPlaylists, DownloadUserPlaylist, OpenPlaylistFolder } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import './App.css';
 
@@ -29,6 +29,7 @@ export default function App() {
   const currentPlaylistIdRef = useRef<number | null>(null);
   const playlistsDataRef = useRef<any[]>([]);
   const [playlistProgresses, setPlaylistProgresses] = useState<{ [key: number]: number }>({});
+  const [playlistErrors, setPlaylistErrors] = useState<{ [key: number]: number }>({});
 
   const [autoScroll, setAutoScroll] = useState(true);
   const listRef = useRef<HTMLDivElement>(null);
@@ -44,14 +45,19 @@ export default function App() {
           const pData = playlistsDataRef.current.find(p => p.id === pid);
           if (pData && pData.count > 0) {
             let totalFraction = 0;
+            let errCount = 0;
             for (const key in newLog) {
               const item = newLog[key];
               if (item.status === 'done') totalFraction += 1;
-              else if (item.status === 'error' || item.status === 'error-token') totalFraction += 1;
+              else if (item.status === 'error' || item.status === 'error-token') {
+                totalFraction += 1;
+                if (item.status === 'error') errCount += 1;
+              }
               else totalFraction += (item.percentage || 0);
             }
             const p = (totalFraction / pData.count) * 100;
             setPlaylistProgresses(prevProg => ({ ...prevProg, [pid]: p > 100 ? 100 : p }));
+            setPlaylistErrors(prev => ({ ...prev, [pid]: errCount }));
           }
         }
         
@@ -156,6 +162,7 @@ export default function App() {
       if (playlistProgresses[p.id] === 100) continue; // skip already downloaded
       currentPlaylistIdRef.current = p.id;
       setPlaylistProgresses(prev => ({...prev, [p.id]: 0}));
+      setPlaylistErrors(prev => ({...prev, [p.id]: 0}));
       setProgressLog({});
       try {
         await DownloadUserPlaylist(p.id, p.title);
@@ -170,6 +177,7 @@ export default function App() {
   const downloadSinglePlaylist = async (p: any) => {
     currentPlaylistIdRef.current = p.id;
     setPlaylistProgresses(prev => ({...prev, [p.id]: 0}));
+    setPlaylistErrors(prev => ({...prev, [p.id]: 0}));
     setProgressLog({});
     try {
       await DownloadUserPlaylist(p.id, p.title);
@@ -294,7 +302,7 @@ export default function App() {
                              p.thumb?.photo_300 || p.thumb?.photo_600 || p.thumb?.photo_68 || '';
             
             return (
-              <div key={p.id} className="playlist-card" onClick={() => downloadSinglePlaylist(p)}>
+              <div key={p.id} className="playlist-card" onClick={() => prog === 100 ? OpenPlaylistFolder(p.title) : downloadSinglePlaylist(p)}>
                 <div className="playlist-thumb">
                   {thumbUrl ? (
                     <img src={thumbUrl} alt={p.title} />
@@ -308,7 +316,13 @@ export default function App() {
                      </div>
                   )}
                   {prog === 100 && (
-                     <div className="playlist-overlay-success"><IconCheck /></div>
+                     playlistErrors[p.id] > 0 ? (
+                        <div className="playlist-overlay-success" style={{background: 'rgba(234, 179, 8, 0.8)'}} title={`${playlistErrors[p.id]} треков недоступно из-за авторских прав`}>
+                           <span style={{fontSize: '2rem'}}>⚠️</span>
+                        </div>
+                     ) : (
+                        <div className="playlist-overlay-success"><IconCheck /></div>
+                     )
                   )}
                 </div>
                 <div className="playlist-info">

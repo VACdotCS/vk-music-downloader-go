@@ -42,6 +42,10 @@ export function OpenAuthPage() {
   return window['go']['main']['App']['OpenAuthPage']();
 }
 
+export function OpenPlaylistFolder(arg1) {
+  return window['go']['main']['App']['OpenPlaylistFolder'](arg1);
+}
+
 export function ParseAndSaveUrlToken(arg1) {
   return window['go']['main']['App']['ParseAndSaveUrlToken'](arg1);
 }

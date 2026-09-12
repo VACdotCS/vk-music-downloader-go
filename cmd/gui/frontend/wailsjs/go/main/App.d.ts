@@ -22,6 +22,8 @@ export function HasValidToken():Promise<boolean>;
 
 export function OpenAuthPage():Promise<void>;
 
+export function OpenPlaylistFolder(arg1:string):Promise<void>;
+
 export function ParseAndSaveUrlToken(arg1:string):Promise<void>;
 
 export function SaveToken(arg1:string):Promise<void>;
