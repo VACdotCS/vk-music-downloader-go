@@ -231,10 +231,11 @@ export default function App() {
       setPlaylistErrors(prev => ({...prev, [p.id]: localProgress.errors}));
     } catch (e) {
       console.error(e);
+    } finally {
+      currentPlaylistIdRef.current = null;
+      setActivePlaylistId(null);
+      setIsPlaylistsDownloading(false);
     }
-    currentPlaylistIdRef.current = null;
-    setActivePlaylistId(null);
-    setIsPlaylistsDownloading(false);
   };
 
   if (loading) return (

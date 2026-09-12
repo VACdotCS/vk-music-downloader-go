@@ -146,6 +146,16 @@ func DownloadBatchOfTracks(ctx context.Context, toDownload []api.Audio, savePath
 					return ctx.Err()
 				}
 
+				if _, err := os.Stat(mp3FilePath); err == nil {
+					linesMu.Lock()
+					lines[indexInBatch] = pterm.Green("✅ " + fmt.Sprintf("%d. Пропущен (уже скачан): %s", currentIndex, fileName))
+					linesMu.Unlock()
+					if GUIProgressCallback != nil {
+						GUIProgressCallback(currentIndex, fileName, 1.0, "done")
+					}
+					return nil
+				}
+
 				progressCb := func(percentage float64) {
 					progressStr := ui.RenderDownloaderProgress(percentage, utf8.RuneCountInString(taskTitle), maxTitleLength, 0)
 					
