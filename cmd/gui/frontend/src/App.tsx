@@ -36,16 +36,27 @@ export default function App() {
   useEffect(() => {
     checkToken();
     EventsOn('download-progress', (data) => {
-      setProgressLog((prev) => ({ ...prev, [data.index]: data }));
-      
-      if (currentPlaylistIdRef.current !== null && playlistsDataRef.current.length > 0) {
-        const pid = currentPlaylistIdRef.current;
-        const pData = playlistsDataRef.current.find(p => p.id === pid);
-        if (pData && pData.count > 0) {
-          const p = ((data.index - 1 + (data.percentage || 0)) / pData.count) * 100;
-          setPlaylistProgresses(prev => ({ ...prev, [pid]: p > 100 ? 100 : p }));
+      setProgressLog((prev) => {
+        const newLog = { ...prev, [data.index]: data };
+        
+        if (currentPlaylistIdRef.current !== null && playlistsDataRef.current.length > 0) {
+          const pid = currentPlaylistIdRef.current;
+          const pData = playlistsDataRef.current.find(p => p.id === pid);
+          if (pData && pData.count > 0) {
+            let totalFraction = 0;
+            for (const key in newLog) {
+              const item = newLog[key];
+              if (item.status === 'done') totalFraction += 1;
+              else if (item.status === 'error' || item.status === 'error-token') totalFraction += 1;
+              else totalFraction += (item.percentage || 0);
+            }
+            const p = (totalFraction / pData.count) * 100;
+            setPlaylistProgresses(prevProg => ({ ...prevProg, [pid]: p > 100 ? 100 : p }));
+          }
         }
-      }
+        
+        return newLog;
+      });
 
       // Авто-логаут при протухании токена (400 ошибки)
       if (data.status === 'error-token') {
@@ -145,6 +156,7 @@ export default function App() {
       if (playlistProgresses[p.id] === 100) continue; // skip already downloaded
       currentPlaylistIdRef.current = p.id;
       setPlaylistProgresses(prev => ({...prev, [p.id]: 0}));
+      setProgressLog({});
       try {
         await DownloadUserPlaylist(p.id, p.title);
         setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
@@ -159,6 +171,7 @@ export default function App() {
   const downloadSinglePlaylist = async (p: any) => {
     currentPlaylistIdRef.current = p.id;
     setPlaylistProgresses(prev => ({...prev, [p.id]: 0}));
+    setProgressLog({});
     try {
       await DownloadUserPlaylist(p.id, p.title);
       setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
