@@ -51,7 +51,7 @@ func GetAllAudioScenario(savePath string, vkService *api.VkApiService) error {
 
 	for _, audio := range audioList {
 		expectedName := utils.GetNormalFileName(audio.Artist, audio.Title)
-		
+
 		// Check if file already downloaded
 		found := false
 		for dFile := range downloadedFilesMeta {

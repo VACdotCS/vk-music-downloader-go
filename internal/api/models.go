@@ -9,12 +9,31 @@ type Audio struct {
 	ContentRestricted int    `json:"content_restricted,omitempty"`
 }
 
+type Playlist struct {
+	ID      int    `json:"id"`
+	OwnerID int    `json:"owner_id"`
+	Title   string `json:"title"`
+}
+
 type VkAudioResponse struct {
 	Response *struct {
 		Count int     `json:"count"`
 		Items []Audio `json:"items"`
 	} `json:"response"`
 	Error *VkError `json:"error"`
+}
+
+type VkPlaylistsResponse struct {
+	Response *struct {
+		Count int        `json:"count"`
+		Items []Playlist `json:"items"`
+	} `json:"response"`
+	Error *VkError `json:"error"`
+}
+
+type VkAudioByIdResponse struct {
+	Response []Audio  `json:"response"`
+	Error    *VkError `json:"error"`
 }
 
 type VkError struct {

@@ -124,15 +124,15 @@ func getSaveFolder() error {
 func mainMenu() bool {
 	choices := []string{
 		"🎶 Скачать все треки из основного плейлиста",
-		"🎶 Скачать все плейлисты (В разработке)",
-		"🔗 Скачать трек по ссылке (В разработке)",
-		"🔗 Скачать плейлист по ссылке (В разработке)",
+		"🎶 Скачать все плейлисты",
+		"🔗 Скачать трек по ссылке",
+		"🔗 Скачать плейлист по ссылке",
 		"⚙️ Показать путь для скачивания",
 		"⚙️ Изменить путь для скачивания",
 		"⚙️ Вывести путь к приложению",
 		"⚙️ Очистить весь кэш (удалит всё, кроме пути сохранения треков)",
 		"⚙️ Вывести заблокированные треки",
-		"⚙️ Получить бесконечный токен (В разработке)",
+		"⚙️ Получить бесконечный токен",
 		"🚪👋 Выход",
 	}
 
@@ -149,6 +149,12 @@ func mainMenu() bool {
 	switch choice {
 	case choices[0]:
 		scenarios.GetAllAudioScenario(myConfig.SavePath, vkService)
+	case choices[1]:
+		scenarios.GetAllPlaylistsTracksScenario(myConfig.SavePath, vkService)
+	case choices[2]:
+		scenarios.GetTrackByLinkScenario(myConfig.SavePath, vkService)
+	case choices[3]:
+		scenarios.GetPlaylistTracksByLinkScenario(myConfig.SavePath, vkService)
 	case choices[4]:
 		fmt.Printf("Путь: %s\n", myConfig.SavePath)
 	case choices[5]:
@@ -160,6 +166,10 @@ func mainMenu() bool {
 		cache.ClearCache()
 	case choices[8]:
 		cache.OutputBlockedTracks()
+	case choices[9]:
+		if err := scenarios.GetUnlimitedTokenScenario(myConfig); err == nil {
+			initVkService()
+		}
 	case choices[10]:
 		cache.ClearTempFiles(myConfig.SavePath)
 		pterm.Info.Println("До свидания!")
