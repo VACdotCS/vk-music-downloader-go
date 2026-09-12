@@ -2,7 +2,10 @@ module gui
 
 go 1.25.0
 
-require github.com/wailsapp/wails/v2 v2.15.0
+require (
+	github.com/wailsapp/wails/v2 v2.15.0
+	vk-music-downloader-go v0.0.0-00010101000000-000000000000
+)
 
 require (
 	atomicgo.dev/cursor v0.2.0 // indirect
@@ -48,7 +51,6 @@ require (
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
-	vk-music-downloader-go v0.0.0-00010101000000-000000000000 // indirect
 )
 
 // replace github.com/wailsapp/wails/v2 v2.15.0 => C:\Users\09062\go\pkg\mod

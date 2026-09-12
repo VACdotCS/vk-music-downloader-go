@@ -17,6 +17,7 @@ import (
 	"github.com/pterm/pterm"
 	"vk-music-downloader-go/core/api"
 	"vk-music-downloader-go/core/cache"
+	"vk-music-downloader-go/core/config"
 	"vk-music-downloader-go/core/pool"
 	"vk-music-downloader-go/core/ui"
 	"vk-music-downloader-go/core/utils"
@@ -93,19 +94,23 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 					currentContent := strings.Join(lines, "\n")
 					
 					if currentContent != lastContent {
-						for _, l := range lines {
-							fmt.Fprintln(writer, l)
+						if !config.IsGUI {
+							for _, l := range lines {
+								fmt.Fprintln(writer, l)
+							}
+							writer.Flush()
 						}
-						writer.Flush()
 						lastContent = currentContent
 					}
 					linesMu.Unlock()
 				case <-done:
 					linesMu.Lock()
-					for _, l := range lines {
-						fmt.Fprintln(writer, l)
+					if !config.IsGUI {
+						for _, l := range lines {
+							fmt.Fprintln(writer, l)
+						}
+						writer.Flush()
 					}
-					writer.Flush()
 					linesMu.Unlock()
 					return
 				}
@@ -165,6 +170,10 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 					linesMu.Lock()
 					lines[indexInBatch] = pterm.Red("❌ " + fmt.Sprintf("%d. Ошибка скачивания: %s - %s", currentIndex, audio.Artist, audio.Title))
 					linesMu.Unlock()
+					
+					if GUIProgressCallback != nil {
+						GUIProgressCallback(currentIndex, fileName, 0, "error")
+					}
 					return err
 				}
 
@@ -175,6 +184,10 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 				linesMu.Lock()
 				lines[indexInBatch] = pterm.Green("✅ " + successTitle + " " + progressStr)
 				linesMu.Unlock()
+				
+				if GUIProgressCallback != nil {
+					GUIProgressCallback(currentIndex, fileName, 1.0, "done")
+				}
 				
 				return nil
 			})

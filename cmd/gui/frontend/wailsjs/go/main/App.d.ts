@@ -3,6 +3,10 @@
 
 export function DownloadAllAudio():Promise<void>;
 
+export function DownloadPlaylist(arg1:string):Promise<void>;
+
+export function DownloadTrack(arg1:string):Promise<void>;
+
 export function GetSavePath():Promise<string>;
 
 export function HasValidToken():Promise<boolean>;

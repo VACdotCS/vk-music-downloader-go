@@ -5,6 +5,8 @@ import (
 	"os"
 )
 
+var IsGUI = false
+
 type Config struct {
 	SavePath string `json:"save_path,omitempty"`
 	Token    *Token `json:"token,omitempty"`

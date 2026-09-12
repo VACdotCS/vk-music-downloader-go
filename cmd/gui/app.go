@@ -84,6 +84,32 @@ func (a *App) initProgressCallback() {
 	}
 }
 
+// DownloadTrack скачивает один трек по ссылке
+func (a *App) DownloadTrack(link string) error {
+	a.initProgressCallback()
+	vkService := api.NewVkApiService(a.config.Token.AccessToken, a.config.Token.UserID)
+	audioData, err := vkService.GetAudioByLink(link)
+	if err != nil {
+		return err
+	}
+	downloader.DownloadBatchOfTracks([]api.Audio{*audioData}, a.config.SavePath, 1)
+	return nil
+}
+
+// DownloadPlaylist скачивает плейлист по ссылке
+func (a *App) DownloadPlaylist(link string) error {
+	a.initProgressCallback()
+	vkService := api.NewVkApiService(a.config.Token.AccessToken, a.config.Token.UserID)
+	
+	tracks, err := vkService.GetTracksOfPlaylistByLink(link)
+	if err != nil {
+		return err
+	}
+	
+	downloader.DownloadBatchOfTracks(tracks, a.config.SavePath, 1)
+	return nil
+}
+
 // DownloadAllAudio запускает сценарий скачивания всей музыки
 func (a *App) DownloadAllAudio() error {
 	a.initProgressCallback()

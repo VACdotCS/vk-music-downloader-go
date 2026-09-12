@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio } from '../wailsjs/go/main/App';
+import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import './App.css';
 
@@ -10,6 +10,10 @@ export default function App() {
   const [savePath, setSavePath] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
   const [progressLog, setProgressLog] = useState<{ [key: number]: any }>({});
+  
+  // URL inputs
+  const [trackUrl, setTrackUrl] = useState('');
+  const [playlistUrl, setPlaylistUrl] = useState('');
 
   useEffect(() => {
     checkToken();
@@ -42,17 +46,18 @@ export default function App() {
     if (path) setSavePath(path);
   };
 
-  const handleDownloadAll = async () => {
+  const runDownload = async (fn: () => Promise<void>) => {
     if (!savePath || savePath === 'Не выбрана') {
       alert('Сначала выберите папку для сохранения!');
       return;
     }
     setIsDownloading(true);
+    setProgressLog({});
     try {
-      await DownloadAllAudio();
+      await fn();
       alert('Скачивание успешно завершено!');
     } catch (e) {
-      alert('Ошибка при скачивании: ' + e);
+      alert('Ошибка: ' + e);
     }
     setIsDownloading(false);
   };
@@ -71,7 +76,6 @@ export default function App() {
             placeholder='{"data": {"access_token": "...", ...}}'
           />
           <button className="btn-primary" onClick={handleSaveToken}>Сохранить токен</button>
-          <p className="help-text">Если вы не знаете как получить токен, ознакомьтесь с гайдом на GitHub.</p>
         </div>
       </div>
     );
@@ -81,20 +85,26 @@ export default function App() {
     const items = Object.values(progressLog).sort((a, b) => a.index - b.index);
     return (
       <div className="app-container">
-        <h2>Скачивание треков...</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>Прогресс скачивания</h2>
+        </div>
         <div className="progress-list">
           {items.map((item) => (
-            <div key={item.index} className="progress-item">
-              <span className="track-title">{item.title}</span>
-              <div className="progress-bar-bg">
-                <div 
-                  className={`progress-bar-fill ${item.percentage >= 1.0 ? 'done' : ''}`}
-                  style={{ width: `${item.percentage * 100}%` }}
-                ></div>
-              </div>
+            <div key={item.index} className={`progress-item ${item.status === 'error' ? 'item-error' : ''}`}>
+              <span className="track-title">{item.index}. {item.title}</span>
+              {item.status === 'error' ? (
+                <span className="error-text">❌ Ошибка скачивания</span>
+              ) : (
+                <div className="progress-bar-bg">
+                  <div 
+                    className={`progress-bar-fill ${item.status === 'done' ? 'done' : ''}`}
+                    style={{ width: `${item.percentage * 100}%` }}
+                  ></div>
+                </div>
+              )}
             </div>
           ))}
-          {items.length === 0 && <p>Получение списка треков...</p>}
+          {items.length === 0 && <p className="loading-text">Загрузка данных...</p>}
         </div>
       </div>
     );
@@ -103,7 +113,7 @@ export default function App() {
   return (
     <div className="app-container">
       <div className="header">
-        <h1>VK Music Downloader</h1>
+        <h1>Меню загрузки</h1>
       </div>
       
       <div className="card menu-card">
@@ -115,10 +125,41 @@ export default function App() {
           <button className="btn-secondary" onClick={handleSelectDir}>Изменить</button>
         </div>
 
-        <div className="actions">
-          <button className="btn-action" onClick={handleDownloadAll}>
-            🎵 Скачать все треки
+        <div className="scenario-section">
+          <h3>🎵 Все треки</h3>
+          <button className="btn-action" onClick={() => runDownload(DownloadAllAudio)}>
+            Скачать всю мою музыку
           </button>
+        </div>
+
+        <div className="scenario-section">
+          <h3>▶️ Скачать плейлист</h3>
+          <div className="input-group">
+            <input 
+              type="text" 
+              placeholder="Вставьте ссылку на плейлист..." 
+              value={playlistUrl}
+              onChange={(e) => setPlaylistUrl(e.target.value)}
+            />
+            <button className="btn-primary" onClick={() => runDownload(() => DownloadPlaylist(playlistUrl))}>
+              Скачать
+            </button>
+          </div>
+        </div>
+
+        <div className="scenario-section">
+          <h3>🎶 Один трек</h3>
+          <div className="input-group">
+            <input 
+              type="text" 
+              placeholder="Вставьте ссылку на трек..." 
+              value={trackUrl}
+              onChange={(e) => setTrackUrl(e.target.value)}
+            />
+            <button className="btn-primary" onClick={() => runDownload(() => DownloadTrack(trackUrl))}>
+              Скачать
+            </button>
+          </div>
         </div>
       </div>
     </div>

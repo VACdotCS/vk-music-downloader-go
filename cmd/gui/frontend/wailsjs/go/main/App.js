@@ -6,6 +6,14 @@ export function DownloadAllAudio() {
   return window['go']['main']['App']['DownloadAllAudio']();
 }
 
+export function DownloadPlaylist(arg1) {
+  return window['go']['main']['App']['DownloadPlaylist'](arg1);
+}
+
+export function DownloadTrack(arg1) {
+  return window['go']['main']['App']['DownloadTrack'](arg1);
+}
+
 export function GetSavePath() {
   return window['go']['main']['App']['GetSavePath']();
 }
