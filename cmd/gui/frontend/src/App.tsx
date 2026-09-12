@@ -46,19 +46,26 @@ export default function App() {
           const pid = currentPlaylistIdRef.current;
           const pData = playlistsDataRef.current.find(p => p.id === pid);
           if (pData && pData.count > 0) {
-            let totalFraction = 0;
+            let successFraction = 0;
             let errCount = 0;
             for (const key in newLog) {
               const item = newLog[key];
-              if (item.status === 'done') totalFraction += 1;
-              else if (item.status === 'error' || item.status === 'error-token') {
-                totalFraction += 1;
+              if (item.status === 'done') {
+                successFraction += 1;
+              } else if (item.status === 'error' || item.status === 'error-token') {
                 if (item.status === 'error') errCount += 1;
+              } else {
+                successFraction += (item.percentage || 0);
               }
-              else totalFraction += (item.percentage || 0);
             }
-            const p = (totalFraction / pData.count) * 100;
-            setPlaylistProgresses(prevProg => ({ ...prevProg, [pid]: p > 100 ? 100 : p }));
+            
+            const p = (successFraction / pData.count) * 100;
+            // Чтобы не было скачков вниз из-за того, что batch.go еще не прислал 'done' для старых треков:
+            setPlaylistProgresses(prevProg => {
+               const oldP = prevProg[pid] || 0;
+               const newP = p > 100 ? 100 : p;
+               return { ...prevProg, [pid]: Math.max(oldP, newP) };
+            });
             setPlaylistErrors(prev => ({ ...prev, [pid]: errCount }));
           }
         }
@@ -183,7 +190,6 @@ export default function App() {
       if (playlistProgresses[p.id] === 100) continue; // skip already downloaded
       setActivePlaylistId(p.id);
       currentPlaylistIdRef.current = p.id;
-      setPlaylistProgresses(prev => ({...prev, [p.id]: 0}));
       setPlaylistErrors(prev => ({...prev, [p.id]: 0}));
       setProgressLog({});
       try {
@@ -202,7 +208,6 @@ export default function App() {
     setIsPlaylistsDownloading(true);
     setActivePlaylistId(p.id);
     currentPlaylistIdRef.current = p.id;
-    setPlaylistProgresses(prev => ({...prev, [p.id]: 0}));
     setPlaylistErrors(prev => ({...prev, [p.id]: 0}));
     setProgressLog({});
     try {
@@ -363,18 +368,16 @@ export default function App() {
                      )
                   )}
                 </div>
-                <div className="playlist-progress-bar">
+                <div className="playlist-progress-bar" style={{ display: 'flex' }}>
                   <div className="playlist-progress-fill" style={{width: `${prog}%`}}></div>
+                  {playlistErrors[p.id] > 0 && (
+                    <div className="playlist-progress-error" style={{width: `${(playlistErrors[p.id] / p.count) * 100}%`, background: '#ef4444', height: '100%', transition: 'width 0.3s ease'}}></div>
+                  )}
                 </div>
                 <div className="playlist-info">
                   <div className="playlist-title" title={p.title}>{p.title}</div>
                   <div className="playlist-count">{p.count} треков</div>
                 </div>
-                {prog > 0 && (
-                  <div className="playlist-progress-bar">
-                    <div className="playlist-progress-fill" style={{ width: `${prog}%` }}></div>
-                  </div>
-                )}
               </div>
             );
           })}
