@@ -65,6 +65,14 @@ func ClearCache() {
 }
 
 func ClearTempFiles(savePath string) {
-	// В оригинале очищались временные файлы
-	// Здесь можно добавить логику удаления файлов, начинающихся с temp- и .ts
+	files, err := os.ReadDir(savePath)
+	if err != nil {
+		return
+	}
+
+	for _, file := range files {
+		if !file.IsDir() && (strings.HasPrefix(file.Name(), "temp-") || strings.HasSuffix(file.Name(), ".ts")) {
+			_ = os.Remove(filepath.Join(savePath, file.Name()))
+		}
+	}
 }
