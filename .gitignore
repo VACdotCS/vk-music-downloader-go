@@ -29,3 +29,4 @@ cmd/gui/build/bin/
 
 # Tracks
 music/
+*.mp3
