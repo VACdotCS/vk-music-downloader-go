@@ -89,7 +89,14 @@ export default function App() {
       await fn();
       setTimeout(() => alert('Скачивание завершено!'), 500);
     } catch (e) {
-      alert('Ошибка: ' + e);
+      const errStr = String(e);
+      if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
+        alert("Токен устарел! Пожалуйста, получите новый токен.");
+        ClearToken().then(() => window.location.reload());
+      } else {
+        alert('Ошибка: ' + errStr);
+      }
+      setIsDownloading(false);
     }
   };
 
