@@ -1,7 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import './App.css';
+
+// Иконки (встроенные SVG для красоты)
+const IconFolder = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>;
+const IconDownload = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
+const IconMusic = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>;
+const IconList = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>;
+const IconCheck = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>;
+const IconX = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
 
 export default function App() {
   const [hasToken, setHasToken] = useState(false);
@@ -11,9 +19,11 @@ export default function App() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [progressLog, setProgressLog] = useState<{ [key: number]: any }>({});
   
-  // URL inputs
   const [trackUrl, setTrackUrl] = useState('');
   const [playlistUrl, setPlaylistUrl] = useState('');
+  
+  const [autoScroll, setAutoScroll] = useState(true);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     checkToken();
@@ -22,12 +32,18 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    if (autoScroll && listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
+  }, [progressLog, autoScroll]);
+
   const checkToken = async () => {
     const valid = await HasValidToken();
     setHasToken(valid);
     if (valid) {
       const path = await GetSavePath();
-      setSavePath(path || 'Не выбрана');
+      setSavePath(path || 'Папка не выбрана');
     }
     setLoading(false);
   };
@@ -47,35 +63,46 @@ export default function App() {
   };
 
   const runDownload = async (fn: () => Promise<void>) => {
-    if (!savePath || savePath === 'Не выбрана') {
-      alert('Сначала выберите папку для сохранения!');
+    if (!savePath || savePath === 'Папка не выбрана') {
+      alert('Пожалуйста, выберите папку для сохранения музыки!');
       return;
     }
     setIsDownloading(true);
     setProgressLog({});
     try {
       await fn();
-      alert('Скачивание успешно завершено!');
+      setTimeout(() => alert('Скачивание успешно завершено!'), 500);
     } catch (e) {
       alert('Ошибка: ' + e);
     }
-    setIsDownloading(false);
   };
+
+  const cancelDownload = () => {
+    // В реальном приложении тут нужен сигнал отмены в Go. Пока просто скрываем экран.
+    setIsDownloading(false);
+  }
 
   if (loading) return <div className="app-container"><div className="loader"></div></div>;
 
   if (!hasToken) {
     return (
-      <div className="app-container flex-center">
-        <div className="card">
+      <div className="app-container flex-center fade-in">
+        <div className="card auth-card">
+          <div className="auth-icon"><IconMusic /></div>
           <h1>Вход в VK Music</h1>
-          <p>Вставьте JSON-объект с вашим access_token из ВК:</p>
+          <p className="subtitle">Для начала работы вставьте ваш access_token</p>
           <textarea
+            className="modern-input"
             value={tokenInput}
             onChange={(e) => setTokenInput(e.target.value)}
             placeholder='{"data": {"access_token": "...", ...}}'
           />
-          <button className="btn-primary" onClick={handleSaveToken}>Сохранить токен</button>
+          <button className="btn-primary auth-btn" onClick={handleSaveToken}>
+            Продолжить
+          </button>
+          <p className="help-text">
+            Не знаете, как получить токен? Прочитайте <a href="#" onClick={(e) => { e.preventDefault(); alert("Инструкция на GitHub: https://github.com/VACdotCS/vk-music-downloader")}}>гайд на GitHub</a>.
+          </p>
         </div>
       </div>
     );
@@ -83,83 +110,129 @@ export default function App() {
 
   if (isDownloading) {
     const items = Object.values(progressLog).sort((a, b) => a.index - b.index);
+    const doneCount = items.filter(i => i.status === 'done' || i.status === 'error').length;
+    const totalCount = items.length;
+    
     return (
-      <div className="app-container">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2>Прогресс скачивания</h2>
+      <div className="app-container fade-in layout-col">
+        <div className="header-glass">
+          <div>
+            <h2>Прогресс загрузки</h2>
+            <p className="subtitle">{doneCount} из {totalCount} обработано</p>
+          </div>
+          <div className="header-actions">
+            <label className="toggle-wrapper">
+              <input 
+                type="checkbox" 
+                checked={autoScroll} 
+                onChange={(e) => setAutoScroll(e.target.checked)} 
+              />
+              <span className="toggle-slider"></span>
+              <span className="toggle-label">Автоскролл</span>
+            </label>
+            <button className="btn-secondary btn-sm" onClick={cancelDownload}>Назад</button>
+          </div>
         </div>
-        <div className="progress-list">
+
+        <div className="progress-list" ref={listRef}>
           {items.map((item) => (
-            <div key={item.index} className={`progress-item ${item.status === 'error' ? 'item-error' : ''}`}>
-              <span className="track-title">{item.index}. {item.title}</span>
-              {item.status === 'error' ? (
-                <span className="error-text">❌ Ошибка скачивания</span>
-              ) : (
-                <div className="progress-bar-bg">
-                  <div 
-                    className={`progress-bar-fill ${item.status === 'done' ? 'done' : ''}`}
-                    style={{ width: `${item.percentage * 100}%` }}
-                  ></div>
-                </div>
-              )}
+            <div key={item.index} className={`progress-row ${item.status}`}>
+              <div className="progress-row-info">
+                <span className="track-number">{item.index}</span>
+                <span className="track-title" title={item.title}>{item.title}</span>
+              </div>
+              
+              <div className="progress-row-status">
+                {item.status === 'error' && <><IconX /> <span className="text-red">Ошибка</span></>}
+                {item.status === 'done' && <><IconCheck /> <span className="text-green">Скачан</span></>}
+                {item.status === 'downloading' && (
+                  <div className="mini-progress-bar">
+                    <div className="mini-progress-fill" style={{ width: `${item.percentage * 100}%` }}></div>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
-          {items.length === 0 && <p className="loading-text">Загрузка данных...</p>}
+          {items.length === 0 && (
+            <div className="empty-state">
+              <div className="spinner"></div>
+              <p>Связь с серверами VK...</p>
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="app-container">
-      <div className="header">
-        <h1>Меню загрузки</h1>
+    <div className="app-container fade-in">
+      <div className="topbar">
+        <div className="brand">
+          <div className="brand-icon"><IconMusic /></div>
+          <h2>VK Music</h2>
+        </div>
       </div>
       
-      <div className="card menu-card">
-        <div className="menu-item">
-          <div>
-            <h3>Папка для сохранения</h3>
-            <p className="path-text">{savePath}</p>
+      <div className="dashboard-grid">
+        {/* Левая колонка */}
+        <div className="card save-card">
+          <div className="card-header">
+            <div className="icon-wrapper"><IconFolder /></div>
+            <h3>Куда сохраняем?</h3>
           </div>
-          <button className="btn-secondary" onClick={handleSelectDir}>Изменить</button>
-        </div>
-
-        <div className="scenario-section">
-          <h3>🎵 Все треки</h3>
-          <button className="btn-action" onClick={() => runDownload(DownloadAllAudio)}>
-            Скачать всю мою музыку
+          <div className="path-box" title={savePath}>
+            {savePath}
+          </div>
+          <button className="btn-secondary w-full mt-1" onClick={handleSelectDir}>
+            Выбрать другую папку
           </button>
         </div>
 
-        <div className="scenario-section">
-          <h3>▶️ Скачать плейлист</h3>
-          <div className="input-group">
-            <input 
-              type="text" 
-              placeholder="Вставьте ссылку на плейлист..." 
-              value={playlistUrl}
-              onChange={(e) => setPlaylistUrl(e.target.value)}
-            />
-            <button className="btn-primary" onClick={() => runDownload(() => DownloadPlaylist(playlistUrl))}>
-              Скачать
+        {/* Правая колонка - Сценарии */}
+        <div className="scenarios-container">
+          
+          <div className="scenario-card highlight">
+            <div className="scenario-info">
+              <h3>Моя музыка</h3>
+              <p>Скачать все треки, добавленные в ваш профиль ВК</p>
+            </div>
+            <button className="btn-primary btn-icon" onClick={() => runDownload(DownloadAllAudio)}>
+              <IconDownload /> Скачать всё
             </button>
           </div>
-        </div>
 
-        <div className="scenario-section">
-          <h3>🎶 Один трек</h3>
-          <div className="input-group">
-            <input 
-              type="text" 
-              placeholder="Вставьте ссылку на трек..." 
-              value={trackUrl}
-              onChange={(e) => setTrackUrl(e.target.value)}
-            />
-            <button className="btn-primary" onClick={() => runDownload(() => DownloadTrack(trackUrl))}>
-              Скачать
+          <div className="scenario-card">
+            <div className="scenario-info">
+              <h3><IconList /> Плейлист</h3>
+              <input 
+                className="modern-input sm-input"
+                type="text" 
+                placeholder="https://vk.com/music/playlist/..." 
+                value={playlistUrl}
+                onChange={(e) => setPlaylistUrl(e.target.value)}
+              />
+            </div>
+            <button className="btn-secondary btn-icon" onClick={() => runDownload(() => DownloadPlaylist(playlistUrl))}>
+              <IconDownload /> Загрузить
             </button>
           </div>
+
+          <div className="scenario-card">
+            <div className="scenario-info">
+              <h3><IconMusic /> Один трек</h3>
+              <input 
+                className="modern-input sm-input"
+                type="text" 
+                placeholder="https://vk.com/audio..." 
+                value={trackUrl}
+                onChange={(e) => setTrackUrl(e.target.value)}
+              />
+            </div>
+            <button className="btn-secondary btn-icon" onClick={() => runDownload(() => DownloadTrack(trackUrl))}>
+              <IconDownload /> Загрузить
+            </button>
+          </div>
+
         </div>
       </div>
     </div>
