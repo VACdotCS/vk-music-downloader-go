@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/mattn/go-colorable"
 	"github.com/pterm/pterm"
 	"vk-music-downloader-go/internal/api"
 	"vk-music-downloader-go/internal/cache"
@@ -16,10 +17,15 @@ import (
 	"vk-music-downloader-go/internal/scenarios"
 )
 
-var myConfig *config.Config
-var vkService *api.VkApiService
+var (
+	myConfig  *config.Config
+	vkService *api.VkApiService
+)
 
 func main() {
+	// Подключаем парсер ANSI-цветов, который переводит их в нативные вызовы Windows API
+	pterm.SetDefaultOutput(colorable.NewColorableStdout())
+
 	cache.InitCache()
 	authorInfo()
 
