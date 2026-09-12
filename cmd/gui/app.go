@@ -265,8 +265,13 @@ func (a *App) OpenPlaylistFolder(title string) error {
 	return cmd.Start()
 }
 
-// CheckPlaylistLocalProgress возвращает количество скачанных mp3 файлов в папке плейлиста
-func (a *App) CheckPlaylistLocalProgress(title string) int {
+type LocalProgress struct {
+	Downloaded int `json:"downloaded"`
+	Errors     int `json:"errors"`
+}
+
+// CheckPlaylistLocalProgress возвращает количество скачанных файлов и ошибок
+func (a *App) CheckPlaylistLocalProgress(title string) LocalProgress {
 	safeTitle := title
 	invalidChars := []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*"}
 	for _, char := range invalidChars {
@@ -275,7 +280,7 @@ func (a *App) CheckPlaylistLocalProgress(title string) int {
 	dir := filepath.Join(a.config.SavePath, safeTitle)
 	files, err := os.ReadDir(dir)
 	if err != nil {
-		return 0
+		return LocalProgress{0, 0}
 	}
 	
 	count := 0
@@ -284,7 +289,18 @@ func (a *App) CheckPlaylistLocalProgress(title string) int {
 			count++
 		}
 	}
-	return count
+
+	errorsCount := 0
+	if data, err := os.ReadFile(filepath.Join(dir, "Ошибки_авторских_прав.txt")); err == nil {
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(line, "- ") {
+				errorsCount++
+			}
+		}
+	}
+	
+	return LocalProgress{Downloaded: count, Errors: errorsCount}
 }
 
 // DownloadAllAudio запускает скачивание всех сохраненных треков (не плейлистов)

@@ -154,17 +154,22 @@ export default function App() {
       playlistsDataRef.current = pls || [];
       
       const localProg: { [key: number]: number } = {};
+      const localErrs: { [key: number]: number } = {};
       for (const p of (pls || [])) {
         if (p.count > 0) {
-          const localCount = await CheckPlaylistLocalProgress(p.title);
-          let percent = (localCount / p.count) * 100;
+          const localProgress = await CheckPlaylistLocalProgress(p.title);
+          const totalLocal = localProgress.downloaded + localProgress.errors;
+          let percent = (totalLocal / p.count) * 100;
           if (percent > 100) percent = 100;
           localProg[p.id] = percent;
+          localErrs[p.id] = localProgress.errors;
         } else {
           localProg[p.id] = 0;
+          localErrs[p.id] = 0;
         }
       }
       setPlaylistProgresses(localProg);
+      setPlaylistErrors(localErrs);
       
       setPlaylistsMode(true);
     } catch (e) {
@@ -187,14 +192,21 @@ export default function App() {
   const startPlaylistsDownload = async () => {
     setIsPlaylistsDownloading(true);
     for (const p of playlistsData) {
-      if (playlistProgresses[p.id] === 100) continue; // skip already downloaded
+      const prog = playlistProgresses[p.id] || 0;
+      const errs = playlistErrors[p.id] || 0;
+      const totalProg = prog + (errs / p.count) * 100;
+      if (totalProg >= 99.9) continue; // skip already downloaded (including known errors)
+      
       setActivePlaylistId(p.id);
       currentPlaylistIdRef.current = p.id;
       setPlaylistErrors(prev => ({...prev, [p.id]: 0}));
       setProgressLog({});
       try {
         await DownloadUserPlaylist(p.id, p.title);
-        setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
+        const localProgress = await CheckPlaylistLocalProgress(p.title);
+        const newPercent = (localProgress.downloaded / p.count) * 100;
+        setPlaylistProgresses(prev => ({...prev, [p.id]: newPercent > 100 ? 100 : newPercent}));
+        setPlaylistErrors(prev => ({...prev, [p.id]: localProgress.errors}));
       } catch (e) {
         break; // Ошибка токена или отмена прервет цикл
       }
@@ -212,7 +224,11 @@ export default function App() {
     setProgressLog({});
     try {
       await DownloadUserPlaylist(p.id, p.title);
-      setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
+      // После завершения пересчитываем локальный прогресс, чтобы он зафиксировал txt-файл с ошибками
+      const localProgress = await CheckPlaylistLocalProgress(p.title);
+      const newPercent = (localProgress.downloaded / p.count) * 100;
+      setPlaylistProgresses(prev => ({...prev, [p.id]: newPercent > 100 ? 100 : newPercent}));
+      setPlaylistErrors(prev => ({...prev, [p.id]: localProgress.errors}));
     } catch (e) {
       //
     }
@@ -341,26 +357,29 @@ export default function App() {
         <div className="playlists-grid">
           {playlistsData.map(p => {
             const prog = playlistProgresses[p.id] || 0;
+            const errCount = playlistErrors[p.id] || 0;
+            const errProg = (errCount / p.count) * 100;
+            const totalProg = prog + errProg;
             const thumbUrl = p.photo?.photo_300 || p.photo?.photo_600 || p.photo?.photo_68 || 
                              p.thumb?.photo_300 || p.thumb?.photo_600 || p.thumb?.photo_68 || '';
             
             return (
-              <div key={p.id} className="playlist-card" style={isPlaylistsDownloading && prog !== 100 ? {opacity: 0.7, pointerEvents: 'none'} : {}} onClick={() => prog === 100 ? OpenPlaylistFolder(p.title) : downloadSinglePlaylist(p)}>
+              <div key={p.id} className="playlist-card" style={isPlaylistsDownloading && totalProg < 99.9 ? {opacity: 0.7, pointerEvents: 'none'} : {}} onClick={() => totalProg >= 99.9 ? OpenPlaylistFolder(p.title) : downloadSinglePlaylist(p)}>
                 <div className="playlist-thumb">
                   {thumbUrl ? (
                     <img src={thumbUrl} alt={p.title} />
                   ) : (
                     <div className="playlist-thumb-placeholder"><IconMusic /></div>
                   )}
-                  {activePlaylistId === p.id && prog < 100 && (
+                  {activePlaylistId === p.id && totalProg < 99.9 && (
                      <div className="playlist-overlay-progress">
                         <div className="spinner"></div>
-                        <span>{Math.round(prog)}%</span>
+                        <span>{Math.round(totalProg)}%</span>
                      </div>
                   )}
-                  {prog === 100 && (
-                     playlistErrors[p.id] > 0 ? (
-                        <div className="playlist-overlay-success" style={{background: 'rgba(234, 179, 8, 0.8)'}} title={`${playlistErrors[p.id]} треков недоступно из-за авторских прав`}>
+                  {totalProg >= 99.9 && (
+                     errCount > 0 ? (
+                        <div className="playlist-overlay-success" style={{background: 'rgba(234, 179, 8, 0.8)'}} title={`${errCount} треков недоступно из-за авторских прав`}>
                            <span style={{fontSize: '2rem'}}>⚠️</span>
                         </div>
                      ) : (
@@ -370,8 +389,8 @@ export default function App() {
                 </div>
                 <div className="playlist-progress-bar" style={{ display: 'flex' }}>
                   <div className="playlist-progress-fill" style={{width: `${prog}%`}}></div>
-                  {playlistErrors[p.id] > 0 && (
-                    <div className="playlist-progress-error" style={{width: `${(playlistErrors[p.id] / p.count) * 100}%`, background: '#ef4444', height: '100%', transition: 'width 0.3s ease'}}></div>
+                  {errCount > 0 && (
+                    <div className="playlist-progress-error" style={{width: `${errProg}%`, background: '#ef4444', height: '100%', transition: 'width 0.3s ease'}}></div>
                   )}
                 </div>
                 <div className="playlist-info">

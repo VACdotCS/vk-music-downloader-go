@@ -59,3 +59,22 @@ export namespace api {
 
 }
 
+export namespace main {
+	
+	export class LocalProgress {
+	    downloaded: number;
+	    errors: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LocalProgress(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.downloaded = source["downloaded"];
+	        this.errors = source["errors"];
+	    }
+	}
+
+}
+
