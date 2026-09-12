@@ -22,6 +22,7 @@ A fast, fully standalone CLI utility for downloading music and playlists from VK
    ```cmd
    .\vk-music-downloader.exe
    ```
+   > **⚠️ Important**: The application is fully portable and will create its configuration files (`config.json`, caches, and `ffmpeg`) in the **exact same folder** where it is located. We highly recommend placing the executable in a dedicated folder before running it to avoid cluttering your directories.
 3. Follow the interactive menu:
    * Paste your VK `access_token` (Follow [this guide](https://github.com/VACdotCS/vk-music-downloader) to learn how to get one).
    * Choose a folder to save your tracks.
@@ -56,6 +57,7 @@ go build -o vk-music-downloader.exe main.go
    ```cmd
    .\vk-music-downloader.exe
    ```
+   > **⚠️ Важно**: Программа полностью портативна и создает свои рабочие файлы (`config.json`, кэши и `ffmpeg`) **прямо в той же папке**, откуда была запущена. Настоятельно рекомендуем положить исполняемый файл в отдельную пустую папку перед запуском, чтобы не засорять ваши директории.
 3. Следуйте интерактивному меню:
    * Вставьте ваш `access_token` от ВК (Гайд по получению токена есть в [оригинальном репозитории](https://github.com/VACdotCS/vk-music-downloader)).
    * Выберите папку для сохранения музыки.
