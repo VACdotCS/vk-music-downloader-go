@@ -19,6 +19,7 @@ export default function App() {
   
   const [savePath, setSavePath] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isPlaylistsDownloading, setIsPlaylistsDownloading] = useState(false);
   const [progressLog, setProgressLog] = useState<{ [key: number]: any }>({});
   
   const [trackUrl, setTrackUrl] = useState('');
@@ -155,9 +156,13 @@ export default function App() {
     setLoading(false);
   };
 
+  const cancelPlaylistsDownload = async () => {
+    await CancelDownload();
+    setIsPlaylistsDownloading(false);
+  };
+
   const startPlaylistsDownload = async () => {
-    // Включаем тихий режим скачивания (без экрана логов) 
-    // чтобы пользователь видел прогресс прямо на карточках плейлистов
+    setIsPlaylistsDownloading(true);
     for (const p of playlistsData) {
       if (playlistProgresses[p.id] === 100) continue; // skip already downloaded
       currentPlaylistIdRef.current = p.id;
@@ -168,13 +173,15 @@ export default function App() {
         await DownloadUserPlaylist(p.id, p.title);
         setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
       } catch (e) {
-        break; // Ошибка токена прервет цикл
+        break; // Ошибка токена или отмена прервет цикл
       }
     }
     currentPlaylistIdRef.current = null;
+    setIsPlaylistsDownloading(false);
   };
 
   const downloadSinglePlaylist = async (p: any) => {
+    setIsPlaylistsDownloading(true);
     currentPlaylistIdRef.current = p.id;
     setPlaylistProgresses(prev => ({...prev, [p.id]: 0}));
     setPlaylistErrors(prev => ({...prev, [p.id]: 0}));
@@ -186,6 +193,7 @@ export default function App() {
       //
     }
     currentPlaylistIdRef.current = null;
+    setIsPlaylistsDownloading(false);
   };
 
   if (loading) return <div className="app-container"><div className="loader"></div></div>;
@@ -290,8 +298,12 @@ export default function App() {
             <p className="subtitle">Найдено: {playlistsData.length}</p>
           </div>
           <div className="header-actions">
-            <button className="btn-primary btn-sm" onClick={startPlaylistsDownload}>Скачать все</button>
-            <button className="btn-secondary btn-sm" onClick={() => setPlaylistsMode(false)}>Назад</button>
+            {isPlaylistsDownloading ? (
+               <button className="btn-secondary btn-sm" style={{color: '#ef4444', borderColor: '#ef4444'}} onClick={cancelPlaylistsDownload}>Стоп</button>
+            ) : (
+               <button className="btn-primary btn-sm" onClick={startPlaylistsDownload}>Скачать все</button>
+            )}
+            <button className="btn-secondary btn-sm" onClick={() => setPlaylistsMode(false)} disabled={isPlaylistsDownloading}>Назад</button>
           </div>
         </div>
 
@@ -302,7 +314,7 @@ export default function App() {
                              p.thumb?.photo_300 || p.thumb?.photo_600 || p.thumb?.photo_68 || '';
             
             return (
-              <div key={p.id} className="playlist-card" onClick={() => prog === 100 ? OpenPlaylistFolder(p.title) : downloadSinglePlaylist(p)}>
+              <div key={p.id} className="playlist-card" style={isPlaylistsDownloading && prog !== 100 ? {opacity: 0.7, pointerEvents: 'none'} : {}} onClick={() => prog === 100 ? OpenPlaylistFolder(p.title) : downloadSinglePlaylist(p)}>
                 <div className="playlist-thumb">
                   {thumbUrl ? (
                     <img src={thumbUrl} alt={p.title} />
