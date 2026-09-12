@@ -89,7 +89,7 @@ func GetAllPlaylistsTracksScenario(savePath string, vkService *api.VkApiService)
 		}
 
 		pDownloadSpinner.Success(fmt.Sprintf("Начинаю загрузку: %s", p.Title))
-		downloader.DownloadBatchOfTracks(toDownload, _savePath, namingIndex)
+		downloader.DownloadBatchOfTracks(nil, toDownload, _savePath, namingIndex)
 		pterm.Success.Printf("Плейлист скачан: %s\n\n", p.Title)
 	}
 	return nil

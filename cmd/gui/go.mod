@@ -3,6 +3,7 @@ module gui
 go 1.25.0
 
 require (
+	github.com/pterm/pterm v0.12.83
 	github.com/wailsapp/wails/v2 v2.15.0
 	vk-music-downloader-go v0.0.0-00010101000000-000000000000
 )
@@ -37,7 +38,6 @@ require (
 	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pterm/pterm v0.12.83 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/samber/lo v1.49.1 // indirect
 	github.com/tkrajina/go-reflector v0.5.8 // indirect

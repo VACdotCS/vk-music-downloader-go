@@ -74,7 +74,7 @@ func GetAllAudioScenario(savePath string, vkService *api.VkApiService) error {
 	}
 
 	fmt.Printf("К скачиванию: %d треков\n", len(toDownload))
-	downloader.DownloadBatchOfTracks(toDownload, savePath, namingIndex)
+	downloader.DownloadBatchOfTracks(nil, toDownload, savePath, namingIndex)
 
 	return nil
 }

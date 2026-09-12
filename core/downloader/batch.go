@@ -31,7 +31,7 @@ func generateHash() string {
 	return hex.EncodeToString(bytes)
 }
 
-func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingIndex int) {
+func DownloadBatchOfTracks(ctx context.Context, toDownload []api.Audio, savePath string, startNamingIndex int) {
 	batchSize := 10
 	iterationsCount := (len(toDownload) + batchSize - 1) / batchSize
 
@@ -47,9 +47,12 @@ func DownloadBatchOfTracks(toDownload []api.Audio, savePath string, startNamingI
 	namingIndex := startNamingIndex
 	dl := NewDownloader()
 
-	// Перехватываем Ctrl+C (SIGINT) для gracefully остановки загрузки
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
+	// Если контекст не передан, создаем fallback с поддержкой прерываний (для CLI)
+	if ctx == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt)
+		defer cancel()
+	}
 
 	for it := 0; it < iterationsCount; it++ {
 		// Проверяем, не была ли отменена загрузка пользователем

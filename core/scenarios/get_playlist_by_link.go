@@ -2,6 +2,7 @@ package scenarios
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 
@@ -50,6 +51,12 @@ func GetPlaylistTracksByLinkScenario(savePath string, vkService *api.VkApiServic
 		}
 	}
 
-	downloader.DownloadBatchOfTracks(toDownload, savePath, namingIndex)
+	if len(toDownload) == 0 {
+		pterm.Info.Println("Все треки из плейлиста уже скачаны!")
+		return nil
+	}
+
+	fmt.Printf("К скачиванию: %d треков\n", len(toDownload))
+	downloader.DownloadBatchOfTracks(nil, toDownload, savePath, namingIndex)
 	return nil
 }

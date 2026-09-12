@@ -92,7 +92,7 @@ func (a *App) DownloadTrack(link string) error {
 	if err != nil {
 		return err
 	}
-	downloader.DownloadBatchOfTracks([]api.Audio{*audioData}, a.config.SavePath, 1)
+	downloader.DownloadBatchOfTracks(nil, []api.Audio{*audioData}, a.config.SavePath, 1)
 	return nil
 }
 
@@ -106,7 +106,7 @@ func (a *App) DownloadPlaylist(link string) error {
 		return err
 	}
 	
-	downloader.DownloadBatchOfTracks(tracks, a.config.SavePath, 1)
+	downloader.DownloadBatchOfTracks(nil, tracks, a.config.SavePath, 1)
 	return nil
 }
 
