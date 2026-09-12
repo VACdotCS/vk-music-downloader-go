@@ -1,31 +1,39 @@
 version: '3'
 
 vars:
-  APP_NAME_WIN: vk-music-downloader-windows-amd64.exe
-  APP_NAME_LINUX: vk-music-downloader-linux-amd64
+  CLI_WIN: vk-music-downloader-cli-windows-amd64.exe
+  CLI_LINUX: vk-music-downloader-cli-linux-amd64
+  GUI_WIN: vk-music-downloader-gui-windows-amd64.exe
   BUILD_DIR: release
   LDFLAGS: -s -w
 
 tasks:
   build:
-    desc: "Сборка обычного бинарника под вашу ОС"
+    desc: "Сборка CLI-бинарника под текущую ОС"
     cmds:
       - go build -ldflags="{{.LDFLAGS}}" -o vk-music-downloader.exe cmd/cli/main.go
 
+  build-gui:
+    desc: "Сборка GUI (Wails) под Windows"
+    dir: cmd/gui
+    cmds:
+      - wails build -ldflags "{{.LDFLAGS}}" -o ../../{{.BUILD_DIR}}/{{.GUI_WIN}}
+
   release:
-    desc: "Сборка релизных бинарников под Windows и Linux"
+    desc: "Полная сборка CLI + GUI под Windows и Linux"
     cmds:
       - task: clean
       - mkdir -p {{.BUILD_DIR}}
-      - cmd: go build -ldflags="{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.APP_NAME_WIN}} cmd/cli/main.go
+      - cmd: go build -ldflags="{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.CLI_WIN}} cmd/cli/main.go
         env:
           GOOS: windows
           GOARCH: amd64
-      - cmd: go build -ldflags="{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.APP_NAME_LINUX}} cmd/cli/main.go
+      - cmd: go build -ldflags="{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.CLI_LINUX}} cmd/cli/main.go
         env:
           GOOS: linux
           GOARCH: amd64
-      - echo "✅ Релизные бинарники успешно собраны в папке {{.BUILD_DIR}}/"
+      - task: build-gui
+      - echo "✅ Все бинарники собраны в папке {{.BUILD_DIR}}/"
 
   clean:
     desc: "Очистка скомпилированных файлов и кэша"
@@ -36,9 +44,15 @@ tasks:
     ignore_error: true
 
   run:
-    desc: "Быстрый запуск без явной компиляции"
+    desc: "Быстрый запуск CLI без явной компиляции"
     cmds:
       - go run cmd/cli/main.go
+
+  dev-gui:
+    desc: "Запуск GUI в режиме разработки (wails dev)"
+    dir: cmd/gui
+    cmds:
+      - wails dev
 
   tidy:
     desc: "Обновление и подтяжка зависимостей"
