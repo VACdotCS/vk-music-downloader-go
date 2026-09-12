@@ -185,7 +185,7 @@ func DownloadBatchOfTracks(ctx context.Context, toDownload []api.Audio, savePath
 					linesMu.Unlock()
 					
 					if GUIProgressCallback != nil {
-						if strings.Contains(err.Error(), "bad status: 400") || strings.Contains(err.Error(), "bad status: 401") || strings.Contains(err.Error(), "bad status: 403") {
+						if strings.Contains(err.Error(), "bad status: 401") {
 							GUIProgressCallback(currentIndex, fileName, 0, "error-token")
 						} else {
 							GUIProgressCallback(currentIndex, fileName, 0, "error")
