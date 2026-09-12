@@ -67,14 +67,20 @@ func ClearCache() {
 }
 
 func ClearTempFiles(savePath string) {
-	files, err := os.ReadDir(savePath)
+	// Защита: не даем чистить временные файлы в корне диска (напр. C:\) или системных папках
+	absPath, err := filepath.Abs(savePath)
+	if err != nil || len(absPath) <= 3 || strings.EqualFold(absPath, `C:\Windows`) {
+		return
+	}
+
+	files, err := os.ReadDir(absPath)
 	if err != nil {
 		return
 	}
 
 	for _, file := range files {
 		if !file.IsDir() && (strings.HasPrefix(file.Name(), "temp-") || strings.HasSuffix(file.Name(), ".ts")) {
-			_ = os.Remove(filepath.Join(savePath, file.Name()))
+			_ = os.Remove(filepath.Join(absPath, file.Name()))
 		}
 	}
 }

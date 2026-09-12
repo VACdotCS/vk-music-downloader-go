@@ -10,18 +10,18 @@ tasks:
   build:
     desc: "Сборка обычного бинарника под вашу ОС"
     cmds:
-      - go build -ldflags="{{.LDFLAGS}}" -o vk-music-downloader.exe main.go
+      - go build -ldflags="{{.LDFLAGS}}" -o vk-music-downloader.exe cmd/cli/main.go
 
   release:
     desc: "Сборка релизных бинарников под Windows и Linux"
     cmds:
       - task: clean
       - mkdir -p {{.BUILD_DIR}}
-      - cmd: go build -ldflags="{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.APP_NAME_WIN}} main.go
+      - cmd: go build -ldflags="{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.APP_NAME_WIN}} cmd/cli/main.go
         env:
           GOOS: windows
           GOARCH: amd64
-      - cmd: go build -ldflags="{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.APP_NAME_LINUX}} main.go
+      - cmd: go build -ldflags="{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.APP_NAME_LINUX}} cmd/cli/main.go
         env:
           GOOS: linux
           GOARCH: amd64
@@ -38,7 +38,7 @@ tasks:
   run:
     desc: "Быстрый запуск без явной компиляции"
     cmds:
-      - go run main.go
+      - go run cmd/cli/main.go
 
   tidy:
     desc: "Обновление и подтяжка зависимостей"

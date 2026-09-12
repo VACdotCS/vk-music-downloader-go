@@ -10,13 +10,13 @@ LDFLAGS = -s -w
 
 # Быстрый билд под вашу текущую систему
 build:
-	go build -ldflags="$(LDFLAGS)" -o vk-music-downloader.exe main.go
+	go build -ldflags="$(LDFLAGS)" -o vk-music-downloader.exe cmd/cli/main.go
 
 # Билд релизных бинарников под Windows и Linux
 release: clean
 	mkdir -p $(BUILD_DIR)
-	GOOS=windows GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(APP_NAME_WIN) main.go
-	GOOS=linux GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(APP_NAME_LINUX) main.go
+	GOOS=windows GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(APP_NAME_WIN) cmd/cli/main.go
+	GOOS=linux GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(APP_NAME_LINUX) cmd/cli/main.go
 	@echo "Релизные бинарники успешно собраны в папке $(BUILD_DIR)/"
 
 # Очистка скомпилированных файлов и кэша
@@ -27,7 +27,7 @@ clean:
 
 # Быстрый запуск без явной компиляции
 run:
-	go run main.go
+	go run cmd/cli/main.go
 
 # Обновление и подтяжка зависимостей
 tidy:
