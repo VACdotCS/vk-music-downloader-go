@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { HasValidToken, SaveToken, ParseAndSaveUrlToken, OpenAuthPage, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist, CancelDownload, ClearToken } from '../wailsjs/go/main/App';
+import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist, CancelDownload, ClearToken, GetUserPlaylists, DownloadUserPlaylist } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import './App.css';
 
@@ -24,6 +24,12 @@ export default function App() {
   const [trackUrl, setTrackUrl] = useState('');
   const [playlistUrl, setPlaylistUrl] = useState('');
   
+  const [playlistsMode, setPlaylistsMode] = useState(false);
+  const [playlistsData, setPlaylistsData] = useState<any[]>([]);
+  const currentPlaylistIdRef = useRef<number | null>(null);
+  const playlistsDataRef = useRef<any[]>([]);
+  const [playlistProgresses, setPlaylistProgresses] = useState<{ [key: number]: number }>({});
+
   const [autoScroll, setAutoScroll] = useState(true);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -32,9 +38,18 @@ export default function App() {
     EventsOn('download-progress', (data) => {
       setProgressLog((prev) => ({ ...prev, [data.index]: data }));
       
+      if (currentPlaylistIdRef.current !== null && playlistsDataRef.current.length > 0) {
+        const pid = currentPlaylistIdRef.current;
+        const pData = playlistsDataRef.current.find(p => p.id === pid);
+        if (pData && pData.count > 0) {
+          const p = ((data.index - 1 + (data.percentage || 0)) / pData.count) * 100;
+          setPlaylistProgresses(prev => ({ ...prev, [pid]: p > 100 ? 100 : p }));
+        }
+      }
+
       // Авто-логаут при протухании токена (400 ошибки)
       if (data.status === 'error-token') {
-        alert("Токен или ссылки устарели (Ошибка 400). Пожалуйста, получите новый токен!");
+        alert("Токен или ссылки устарели (Ошибка 400). Пожалуйста, получите новый токен (через JSON перехват).");
         CancelDownload().then(() => {
           ClearToken().then(() => {
             window.location.reload();
@@ -104,6 +119,54 @@ export default function App() {
   const handleLogout = async () => {
     await ClearToken();
     checkToken();
+  };
+
+  const handleLoadPlaylists = async () => {
+    if (!savePath || savePath === 'Папка не выбрана') {
+      alert('Пожалуйста, выберите папку для сохранения музыки!');
+      return;
+    }
+    setLoading(true);
+    try {
+      const pls = await GetUserPlaylists();
+      setPlaylistsData(pls || []);
+      playlistsDataRef.current = pls || [];
+      setPlaylistsMode(true);
+    } catch (e) {
+      alert('Ошибка при получении плейлистов: ' + e);
+    }
+    setLoading(false);
+  };
+
+  const startPlaylistsDownload = async () => {
+    // Включаем тихий режим скачивания (без экрана логов) 
+    // чтобы пользователь видел прогресс прямо на карточках плейлистов
+    for (const p of playlistsData) {
+      if (playlistProgresses[p.id] === 100) continue; // skip already downloaded
+      currentPlaylistIdRef.current = p.id;
+      setPlaylistProgresses(prev => ({...prev, [p.id]: 0}));
+      try {
+        await DownloadUserPlaylist(p.id, p.title);
+        setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
+      } catch (e) {
+        break; // Ошибка токена прервет цикл
+      }
+    }
+    currentPlaylistIdRef.current = null;
+    alert("Скачивание плейлистов завершено!");
+  };
+
+  const downloadSinglePlaylist = async (p: any) => {
+    currentPlaylistIdRef.current = p.id;
+    setPlaylistProgresses(prev => ({...prev, [p.id]: 0}));
+    try {
+      await DownloadUserPlaylist(p.id, p.title);
+      setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
+      alert("Плейлист скачан!");
+    } catch (e) {
+      //
+    }
+    currentPlaylistIdRef.current = null;
   };
 
   if (loading) return <div className="app-container"><div className="loader"></div></div>;
@@ -199,6 +262,60 @@ export default function App() {
     );
   }
 
+  if (playlistsMode) {
+    return (
+      <div className="app-container fade-in layout-col">
+        <div className="header-glass">
+          <div>
+            <h2>Ваши плейлисты</h2>
+            <p className="subtitle">Найдено: {playlistsData.length}</p>
+          </div>
+          <div className="header-actions">
+            <button className="btn-primary btn-sm" onClick={startPlaylistsDownload}>Скачать все</button>
+            <button className="btn-secondary btn-sm" onClick={() => setPlaylistsMode(false)}>Назад</button>
+          </div>
+        </div>
+
+        <div className="playlists-grid">
+          {playlistsData.map(p => {
+            const prog = playlistProgresses[p.id] || 0;
+            const thumbUrl = p.thumb?.photo_300 || p.thumb?.photo_600 || p.thumb?.photo_68 || '';
+            
+            return (
+              <div key={p.id} className="playlist-card" onClick={() => downloadSinglePlaylist(p)}>
+                <div className="playlist-thumb">
+                  {thumbUrl ? (
+                    <img src={thumbUrl} alt={p.title} />
+                  ) : (
+                    <div className="playlist-thumb-placeholder"><IconMusic /></div>
+                  )}
+                  {prog > 0 && prog < 100 && (
+                     <div className="playlist-overlay-progress">
+                        <div className="spinner"></div>
+                        <span>{Math.round(prog)}%</span>
+                     </div>
+                  )}
+                  {prog === 100 && (
+                     <div className="playlist-overlay-success"><IconCheck /></div>
+                  )}
+                </div>
+                <div className="playlist-info">
+                  <div className="playlist-title" title={p.title}>{p.title}</div>
+                  <div className="playlist-count">{p.count} треков</div>
+                </div>
+                {prog > 0 && (
+                  <div className="playlist-progress-bar">
+                    <div className="playlist-progress-fill" style={{ width: `${prog}%` }}></div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-container fade-in">
       <div className="topbar">
@@ -239,9 +356,19 @@ export default function App() {
             </button>
           </div>
 
+          <div className="scenario-card highlight-blue">
+            <div className="scenario-info">
+              <h3>Мои плейлисты</h3>
+              <p>Выбрать и скачать свои плейлисты как альбомы</p>
+            </div>
+            <button className="btn-primary btn-icon" style={{backgroundColor: '#3b82f6'}} onClick={handleLoadPlaylists}>
+              <IconList /> Открыть
+            </button>
+          </div>
+
           <div className="scenario-card">
             <div className="scenario-info">
-              <h3><IconList /> Плейлист</h3>
+              <h3><IconList /> Плейлист по ссылке</h3>
               <input 
                 className="modern-input sm-input"
                 type="text" 

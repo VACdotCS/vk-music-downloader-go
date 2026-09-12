@@ -397,3 +397,92 @@ button:active { transform: scale(0.98); }
 }
 .spinner { width: 24px; height: 24px; margin-bottom: 1rem; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+/* Playlists Grid */
+.playlists-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1.5rem;
+  padding: 1rem 0;
+  overflow-y: auto;
+  max-height: calc(100vh - 120px);
+}
+.playlist-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+.playlist-card:hover {
+  transform: translateY(-4px);
+  border-color: #3b82f6;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+.playlist-thumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  background: var(--bg-main);
+}
+.playlist-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.playlist-thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  opacity: 0.3;
+}
+.playlist-thumb-placeholder svg {
+  width: 64px;
+  height: 64px;
+}
+.playlist-overlay-progress, .playlist-overlay-success {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 1.2rem;
+  backdrop-filter: blur(2px);
+}
+.playlist-info {
+  padding: 1rem;
+}
+.playlist-title {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.25rem;
+}
+.playlist-count {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.playlist-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-main);
+}
+.playlist-progress-fill {
+  height: 100%;
+  background: #3b82f6;
+  transition: width 0.3s ease;
+}
+.scenario-card.highlight-blue {
+  background: linear-gradient(145deg, var(--bg-card) 0%, rgba(59, 130, 246, 0.1) 100%);
+  border-color: rgba(59, 130, 246, 0.3);
+}

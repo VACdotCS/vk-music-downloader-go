@@ -22,8 +22,16 @@ export function DownloadTrack(arg1) {
   return window['go']['main']['App']['DownloadTrack'](arg1);
 }
 
+export function DownloadUserPlaylist(arg1, arg2) {
+  return window['go']['main']['App']['DownloadUserPlaylist'](arg1, arg2);
+}
+
 export function GetSavePath() {
   return window['go']['main']['App']['GetSavePath']();
+}
+
+export function GetUserPlaylists() {
+  return window['go']['main']['App']['GetUserPlaylists']();
 }
 
 export function HasValidToken() {

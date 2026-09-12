@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -176,7 +177,41 @@ func (a *App) DownloadPlaylist(link string) error {
 	return nil
 }
 
-// DownloadAllAudio запускает сценарий скачивания всей музыки
+// GetUserPlaylists возвращает список плейлистов пользователя
+func (a *App) GetUserPlaylists() ([]api.Playlist, error) {
+	vkService := api.NewVkApiService(a.config.Token.AccessToken, a.config.Token.UserID)
+	return vkService.GetPlaylists()
+}
+
+// DownloadUserPlaylist скачивает конкретный плейлист пользователя по ID в свою папку
+func (a *App) DownloadUserPlaylist(playlistID int, title string) error {
+	a.initProgressCallback()
+	vkService := api.NewVkApiService(a.config.Token.AccessToken, a.config.Token.UserID)
+	
+	tracks, err := vkService.GetTracksOfUserPlaylist(playlistID)
+	if err != nil {
+		return err
+	}
+	
+	ctx, cancel := context.WithCancel(context.Background())
+	a.downloadCancel = cancel
+	defer cancel()
+
+	// Очищаем имя папки
+	safeTitle := title
+	invalidChars := []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*"}
+	for _, char := range invalidChars {
+		safeTitle = strings.ReplaceAll(safeTitle, char, "")
+	}
+	
+	// Путь сохранения: базовая папка + имя плейлиста
+	savePath := filepath.Join(a.config.SavePath, safeTitle)
+	
+	downloader.DownloadBatchOfTracks(ctx, tracks, savePath, 1)
+	return nil
+}
+
+// DownloadAllAudio запускает скачивание всех сохраненных треков (не плейлистов)
 func (a *App) DownloadAllAudio() error {
 	a.initProgressCallback()
 	vkService := api.NewVkApiService(a.config.Token.AccessToken, a.config.Token.UserID)

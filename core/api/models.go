@@ -9,10 +9,18 @@ type Audio struct {
 	ContentRestricted int    `json:"content_restricted,omitempty"`
 }
 
+type PlaylistThumb struct {
+	Photo300 string `json:"photo_300"`
+	Photo600 string `json:"photo_600"`
+	Photo68  string `json:"photo_68"`
+}
+
 type Playlist struct {
-	ID      int    `json:"id"`
-	OwnerID int    `json:"owner_id"`
-	Title   string `json:"title"`
+	ID      int            `json:"id"`
+	OwnerID int            `json:"owner_id"`
+	Title   string         `json:"title"`
+	Count   int            `json:"count"`
+	Thumb   *PlaylistThumb `json:"thumb,omitempty"`
 }
 
 type VkAudioResponse struct {
