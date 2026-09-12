@@ -29,7 +29,13 @@ func (s *VkApiService) SetToken(token string, userID int) {
 }
 
 func (s *VkApiService) get(url string) ([]byte, error) {
-	resp, err := s.client.Get(url)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "KateMobileAndroid/56 lite-460 (Android 4.4.2; SDK 19; x86; unknown Android SDK built for x86; en)")
+
+	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -62,11 +62,7 @@ export default function App() {
 
   const handleSaveToken = async () => {
     try {
-      if (authMode === 'json') {
-        await SaveToken(tokenInput);
-      } else {
-        await ParseAndSaveUrlToken(tokenInput);
-      }
+      await SaveToken(tokenInput);
       checkToken();
     } catch (e) {
       alert('Ошибка: ' + e);
@@ -91,7 +87,7 @@ export default function App() {
     } catch (e) {
       const errStr = String(e);
       if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
-        alert("Токен устарел! Пожалуйста, получите новый токен.");
+        alert("Токен устарел! Пожалуйста, получите новый токен (через JSON перехват).");
         ClearToken().then(() => window.location.reload());
       } else {
         alert('Ошибка: ' + errStr);
@@ -119,32 +115,28 @@ export default function App() {
           <div className="auth-icon"><IconMusic /></div>
           <h1>Вход в VK Music</h1>
           <p className="subtitle">
-            {authMode === 'url' 
-              ? 'Нажмите кнопку ниже, разрешите доступ и скопируйте ссылку из адресной строки:'
-              : 'Вставьте JSON-объект с вашим access_token из ВК:'}
+            Вставьте JSON-объект с вашим access_token из ВК (Kate Mobile):
           </p>
-          
-          {authMode === 'url' && (
-            <button className="btn-secondary w-full" onClick={OpenAuthPage} style={{ marginBottom: '1rem' }}>
-              1. Получить ссылку авторизации
-            </button>
-          )}
 
           <textarea
             className="modern-input"
             value={tokenInput}
             onChange={(e) => setTokenInput(e.target.value)}
-            placeholder={authMode === 'url' ? 'https://oauth.vk.com/blank.html#access_token=...' : '{"data": {"access_token": "...", ...}}'}
-            style={{ height: authMode === 'url' ? '80px' : '120px' }}
+            placeholder='{"data": {"access_token": "...", ...}}'
+            style={{ height: '120px' }}
           />
           <button className="btn-primary auth-btn" onClick={handleSaveToken}>
-            2. Продолжить
+            Продолжить
           </button>
           
           <div className="auth-footer" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
-            <a href="#" onClick={(e) => { e.preventDefault(); setAuthMode(authMode === 'url' ? 'json' : 'url'); setTokenInput(''); }}>
-              {authMode === 'url' ? 'Ввести JSON (из Kate Mobile)' : 'Получить токен по ссылке'}
-            </a>
+            <p className="help-text">
+              Способ по OAuth ссылке больше не работает (ВК блокирует скачивание). 
+              Используйте сниффер для получения JSON токена.
+            </p>
+            <p className="help-text">
+              <a href="#" onClick={(e) => { e.preventDefault(); alert("Инструкция на GitHub: https://github.com/VACdotCS/vk-music-downloader")}}>Гайд на GitHub</a>
+            </p>
           </div>
         </div>
       </div>
