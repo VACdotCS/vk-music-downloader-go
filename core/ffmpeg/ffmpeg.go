@@ -2,13 +2,16 @@ package ffmpeg
 
 import (
 	"archive/zip"
+	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pterm/pterm"
 )
@@ -22,7 +25,7 @@ func GetPath() string {
 	if _, err := os.Stat(localFfmpeg); err == nil {
 		return localFfmpeg
 	}
-	
+
 	// Если локального нет, ищем в глобальных переменных среды (PATH)
 	globalPath, err := exec.LookPath("ffmpeg")
 	if err == nil {
@@ -32,7 +35,7 @@ func GetPath() string {
 		}
 		return globalPath
 	}
-	
+
 	return "ffmpeg (не установлен)"
 }
 
@@ -55,9 +58,9 @@ func CheckAndDownload() error {
 
 	// Скачиваем ZIP
 	zipPath := filepath.Join(filepath.Dir(exePath), "ffmpeg_temp.zip")
-	
+
 	spinner, _ := pterm.DefaultSpinner.Start("Скачивание FFmpeg...")
-	
+
 	err = downloadFile(ffmpegUrl, zipPath)
 	if err != nil {
 		spinner.Fail("Ошибка скачивания FFmpeg: " + err.Error())
@@ -65,7 +68,7 @@ func CheckAndDownload() error {
 	}
 
 	spinner.UpdateText("Распаковка FFmpeg...")
-	
+
 	err = extractFfmpegExe(zipPath, localFfmpeg)
 	if err != nil {
 		spinner.Fail("Ошибка распаковки: " + err.Error())
@@ -75,7 +78,7 @@ func CheckAndDownload() error {
 
 	_ = os.Remove(zipPath)
 	spinner.Success("FFmpeg успешно установлен в папку с программой!")
-	
+
 	return nil
 }
 
@@ -86,13 +89,30 @@ func downloadFile(url string, filepath string) error {
 	}
 	defer out.Close()
 
-	resp, err := http.Get(url)
+	// Таймауты только на соединение и заголовки — не режем само скачивание тела,
+	// т.к. архив FFmpeg ~130 МБ и на медленном канале может качаться долго.
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout: 15 * time.Second,
+			}).DialContext,
+			ResponseHeaderTimeout: 30 * time.Second,
+		},
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return fmt.Errorf("bad status: %s", resp.Status)
 	}
 
@@ -125,7 +145,7 @@ func extractFfmpegExe(zipPath string, targetExe string) error {
 			if err != nil {
 				return err
 			}
-			
+
 			return nil
 		}
 	}

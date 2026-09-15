@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type VkApiService struct {
@@ -19,7 +20,9 @@ func NewVkApiService(accessToken string, userID int) *VkApiService {
 	return &VkApiService{
 		accessToken: accessToken,
 		userID:      userID,
-		client:      &http.Client{},
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
 }
 
@@ -42,6 +45,7 @@ func (s *VkApiService) get(url string) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return nil, fmt.Errorf("bad status: %d", resp.StatusCode)
 	}
 
