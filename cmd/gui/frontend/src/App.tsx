@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist, CancelDownload, ClearToken, GetUserPlaylists, DownloadUserPlaylist, OpenPlaylistFolder, CheckPlaylistLocalProgress } from '../wailsjs/go/main/App';
+import { HasValidToken, SaveToken, SelectDirectory, GetSavePath, DownloadAllAudio, DownloadTrack, DownloadPlaylist, CancelDownload, ClearToken, GetUserPlaylists, DownloadUserPlaylist, OpenPlaylistFolder, CheckPlaylistLocalProgress, LoginViaBrowser, RefreshSessionHeadless, HasBrowserSession, GetLogs, ClearLogs, GetAvailableBrowsers } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 import './App.css';
 
@@ -10,12 +10,28 @@ const IconMusic = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="no
 const IconList = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>;
 const IconCheck = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>;
 const IconX = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
+const IconGlobe = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>;
+const IconRefresh = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>;
+const IconTerminal = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>;
 
 export default function App() {
   const [hasToken, setHasToken] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tokenInput, setTokenInput] = useState('');
   const [authMode, setAuthMode] = useState<'url' | 'json'>('url');
+  const [browserLoggingIn, setBrowserLoggingIn] = useState(false);
+  const [browserStatusMsg, setBrowserStatusMsg] = useState('');
+  const [showManualAuth, setShowManualAuth] = useState(false);
+  const [isRefreshingToken, setIsRefreshingToken] = useState(false);
+  const [hasBrowserSession, setHasBrowserSession] = useState(false);
+  const [availableBrowsers, setAvailableBrowsers] = useState<Array<{ Path: string; Type: string; Name: string }>>([]);
+  const [selectedBrowserPath, setSelectedBrowserPath] = useState<string>('');
+  
+  const [showLogsModal, setShowLogsModal] = useState(false);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [logsFilter, setLogsFilter] = useState<'all' | 'errors'>('all');
+  const [logsAutoScroll, setLogsAutoScroll] = useState(true);
+  const logsBodyRef = useRef<HTMLDivElement>(null);
   
   const [savePath, setSavePath] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
@@ -79,7 +95,31 @@ export default function App() {
         ClearToken().then(() => window.location.reload());
       }
     });
+
+    // Первоначальная загрузка логов и подписка на новые события
+    GetLogs().then(l => setLogs(l || []));
+    EventsOn('app-log', (entry) => {
+      setLogs(prev => [...prev, entry]);
+    });
+
+    GetAvailableBrowsers().then(bList => {
+      if (bList && bList.length > 0) {
+        setAvailableBrowsers(bList);
+        const edge = bList.find(b => b.Name.includes('Edge'));
+        if (edge) {
+          setSelectedBrowserPath(edge.Path);
+        } else {
+          setSelectedBrowserPath(bList[0].Path);
+        }
+      }
+    }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (logsAutoScroll && logsBodyRef.current) {
+      logsBodyRef.current.scrollTop = logsBodyRef.current.scrollHeight;
+    }
+  }, [logs, logsAutoScroll, showLogsModal]);
 
   useEffect(() => {
     if (autoScroll && listRef.current) {
@@ -94,6 +134,8 @@ export default function App() {
       const path = await GetSavePath();
       setSavePath(path || 'Папка не выбрана');
     }
+    const hasSess = await HasBrowserSession();
+    setHasBrowserSession(hasSess);
     setLoading(false);
   };
 
@@ -103,6 +145,61 @@ export default function App() {
       checkToken();
     } catch (e) {
       alert('Ошибка: ' + e);
+    }
+  };
+
+  const handleBrowserLogin = async () => {
+    setBrowserLoggingIn(true);
+    setBrowserStatusMsg('Открываем vk.ru в браузере... Войдите в свой аккаунт ВКонтакте');
+    try {
+      await LoginViaBrowser(selectedBrowserPath);
+      await checkToken();
+    } catch (e: any) {
+      const errStr = String(e?.message || e);
+      if (errStr.includes('закрыто') || errStr.includes('closed')) {
+        console.log('Окно браузера было закрыто пользователем');
+      } else {
+        alert('Ошибка входа через браузер: ' + errStr);
+      }
+    } finally {
+      setBrowserLoggingIn(false);
+      setBrowserStatusMsg('');
+    }
+  };
+
+  const handleHeadlessRefresh = async () => {
+    const hasSess = await HasBrowserSession();
+    if (!hasSess) {
+      return;
+    }
+    setIsRefreshingToken(true);
+    try {
+      await RefreshSessionHeadless();
+      await checkToken();
+    } catch (e) {
+      console.error('Не удалось обновить токен в фоне:', e);
+    } finally {
+      setIsRefreshingToken(false);
+    }
+  };
+
+  const tryAutoRefreshToken = async (): Promise<boolean> => {
+    // ВНИМАНИЕ: обновлять токен в фоне можно ТОЛЬКО ЕСЛИ ЕСТЬ СОХРАНЁННАЯ СЕССИЯ!
+    const hasSess = await HasBrowserSession();
+    if (!hasSess) {
+      await ClearToken();
+      await checkToken();
+      return false;
+    }
+
+    try {
+      await RefreshSessionHeadless();
+      await checkToken();
+      return true;
+    } catch {
+      await ClearToken();
+      await checkToken();
+      return false;
     }
   };
 
@@ -123,12 +220,13 @@ export default function App() {
       // Скачивание завершено, пользователь сам увидит статус "done"
     } catch (e) {
       const errStr = String(e);
-      if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
-        await ClearToken();
-        checkToken();
-      } else {
-        alert('Ошибка: ' + errStr);
+      if (errStr.includes('context canceled') || errStr.includes('canceled')) {
+        return;
       }
+      if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
+        await tryAutoRefreshToken();
+      }
+      console.error('Ошибка загрузки:', errStr);
     }
     setIsDownloading(false);
   };
@@ -175,11 +273,14 @@ export default function App() {
       setPlaylistsMode(true);
     } catch (e) {
       const errStr = String(e);
+      if (errStr.includes('context canceled') || errStr.includes('canceled')) {
+        return;
+      }
       if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
         await ClearToken();
         checkToken();
       } else {
-        alert('Ошибка при получении плейлистов: ' + e);
+        console.error('Ошибка при получении плейлистов:', e);
       }
     }
     setLoading(false);
@@ -269,6 +370,101 @@ export default function App() {
     }
   };
 
+  const renderLogsModal = () => {
+    if (!showLogsModal) return null;
+    const filtered = logsFilter === 'errors' ? logs.filter(l => l.level === 'ERROR') : logs;
+    const errorCount = logs.filter(l => l.level === 'ERROR').length;
+
+    const copyLogs = () => {
+      const text = filtered.map(l => `[${l.timestamp}] [${l.level}] ${l.message}`).join('\n');
+      navigator.clipboard.writeText(text);
+      alert('Логи скопированы в буфер обмена!');
+    };
+
+    const clearAllLogs = async () => {
+      await ClearLogs();
+      setLogs([]);
+    };
+
+    return (
+      <div className="modal-overlay" onClick={() => setShowLogsModal(false)}>
+        <div className="logs-modal" onClick={e => e.stopPropagation()}>
+          <div className="logs-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <IconTerminal />
+              <h3 style={{ margin: 0 }}>Журнал логов и ошибок</h3>
+              {errorCount > 0 && (
+                <span style={{ fontSize: '0.75rem', background: '#ef4444', color: '#fff', padding: '2px 8px', borderRadius: '12px' }}>
+                  {errorCount} {errorCount === 1 ? 'ошибка' : 'ошибок'}
+                </span>
+              )}
+            </div>
+            <button className="btn-secondary btn-sm" onClick={() => setShowLogsModal(false)}>✕</button>
+          </div>
+
+          <div style={{ padding: '8px 16px', background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                className={`btn-secondary btn-sm ${logsFilter === 'all' ? 'active' : ''}`}
+                style={logsFilter === 'all' ? { borderColor: 'var(--primary)', color: 'var(--primary)' } : {}}
+                onClick={() => setLogsFilter('all')}
+              >
+                Все ({logs.length})
+              </button>
+              <button
+                className={`btn-secondary btn-sm ${logsFilter === 'errors' ? 'active' : ''}`}
+                style={logsFilter === 'errors' ? { borderColor: 'var(--danger)', color: 'var(--danger)' } : {}}
+                onClick={() => setLogsFilter('errors')}
+              >
+                Только ошибки ({errorCount})
+              </button>
+            </div>
+
+            <label className="toggle-wrapper" style={{ fontSize: '0.8rem' }}>
+              <input
+                type="checkbox"
+                checked={logsAutoScroll}
+                onChange={e => setLogsAutoScroll(e.target.checked)}
+              />
+              <span className="toggle-slider"></span>
+              <span className="toggle-label">Автоскролл</span>
+            </label>
+          </div>
+
+          <div className="logs-body" ref={logsBodyRef}>
+            {filtered.length === 0 ? (
+              <div style={{ color: '#71717a', textAlign: 'center', padding: '2rem' }}>
+                {logsFilter === 'errors' ? 'Ошибок пока нет ✨' : 'Журнал пуст'}
+              </div>
+            ) : (
+              filtered.map((l, idx) => (
+                <div key={idx} className={`log-row log-${l.level?.toLowerCase()}`}>
+                  <span className="log-time">[{l.timestamp}]</span>
+                  <span className={`log-badge badge-${l.level?.toLowerCase()}`}>[{l.level}]</span>
+                  <span className="log-msg">{l.message}</span>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="logs-footer">
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="btn-secondary btn-sm" onClick={copyLogs} disabled={filtered.length === 0}>
+                📋 Скопировать
+              </button>
+              <button className="btn-secondary btn-sm" onClick={clearAllLogs} disabled={logs.length === 0}>
+                🗑️ Очистить
+              </button>
+            </div>
+            <button className="btn-secondary btn-sm" onClick={() => setShowLogsModal(false)}>
+              Закрыть
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) return (
     <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100vw', height: '100vh', background: 'var(--bg-main)'}}>
       <div className="loader" style={{width: '64px', height: '64px', borderWidth: '6px'}}></div>
@@ -280,44 +476,110 @@ export default function App() {
   if (!hasToken) {
     return (
       <div className="app-container flex-center fade-in">
-        <div className="card auth-card">
+        <div className="card auth-card" style={{ maxWidth: '480px' }}>
           <div className="auth-icon"><IconMusic /></div>
           <h1>Вход в VK Music</h1>
           <p className="subtitle">
-            Вставьте JSON-объект с вашим access_token из ВК (Kate Mobile):
+            Войдите через браузер для автоматического получения токена и фонового продления сессии:
           </p>
 
-          <div style={{ position: 'relative' }}>
-            <textarea
-              className="modern-input"
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              placeholder='{"data": {"access_token": "...", ...}}'
-              style={{ height: '120px' }}
-            />
-          </div>
-          <button className="btn-primary auth-btn" onClick={handleSaveToken}>
-            Продолжить
-          </button>
+          {availableBrowsers.length > 1 && (
+            <div style={{ marginBottom: '14px', textAlign: 'left' }}>
+              <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                Браузер для входа:
+              </label>
+              <select
+                className="modern-input"
+                style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', cursor: 'pointer' }}
+                value={selectedBrowserPath}
+                onChange={(e) => setSelectedBrowserPath(e.target.value)}
+                disabled={browserLoggingIn}
+              >
+                {availableBrowsers.map((b, idx) => (
+                  <option key={idx} value={b.Path}>
+                    {b.Name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
-            className="btn-secondary auth-btn"
-            onClick={() => setTokenInput('')}
-            disabled={!tokenInput}
-            style={{ marginTop: '0.5rem' }}
+            className="btn-primary auth-btn"
+            onClick={handleBrowserLogin}
+            disabled={browserLoggingIn}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              fontSize: '1rem',
+              padding: '12px 18px',
+              cursor: browserLoggingIn ? 'not-allowed' : 'pointer'
+            }}
           >
-            Очистить
+            <IconGlobe />
+            {browserLoggingIn ? 'Ожидание входа в браузере...' : 'Войти через браузер (Автоматически)'}
           </button>
-          
-          <div className="auth-footer" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
+
+          {browserLoggingIn && (
+            <div style={{ marginTop: '1rem', padding: '12px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.3)', textAlign: 'center' }}>
+              <div className="spinner" style={{ margin: '0 auto 8px', width: '24px', height: '24px' }}></div>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                {browserStatusMsg}
+              </p>
+            </div>
+          )}
+
+          <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+            <button
+              type="button"
+              style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.85rem', textDecoration: 'underline' }}
+              onClick={() => setShowManualAuth(!showManualAuth)}
+            >
+              {showManualAuth ? 'Скрыть ручной ввод токена' : 'Ввести токен вручную (Kate Mobile JSON)'}
+            </button>
+          </div>
+
+          {showManualAuth && (
+            <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                Вставьте JSON-объект токена:
+              </p>
+              <textarea
+                className="modern-input"
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                placeholder='{"data": {"access_token": "...", ...}}'
+                style={{ height: '90px' }}
+              />
+              <button className="btn-secondary auth-btn" onClick={handleSaveToken} style={{ marginTop: '0.5rem' }}>
+                Сохранить токен вручную
+              </button>
+            </div>
+          )}
+
+          <div className="auth-footer" style={{ marginTop: '1.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
             <p className="help-text">
-              Способ по OAuth ссылке больше не работает (ВК блокирует скачивание). 
-              Используйте сниффер для получения JSON токена.
+              💡 Авторизация сохраняется в изолированном профиле. При истечении токена он продлится автоматически в фоне.
             </p>
-            <p className="help-text">
-              <a href="#" onClick={(e) => { e.preventDefault(); alert("Инструкция на GitHub: https://github.com/VACdotCS/vk-music-downloader")}}>Гайд на GitHub</a>
-            </p>
+            <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'center' }}>
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={() => setShowLogsModal(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <IconTerminal />
+                Журнал логов / ошибок
+                {logs.some(l => l.level === 'ERROR') && (
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }}></span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
+        {renderLogsModal()}
       </div>
     );
   }
@@ -455,9 +717,35 @@ export default function App() {
           <div className="brand-icon"><IconMusic /></div>
           <h2>VK Music</h2>
         </div>
-        <button className="btn-secondary btn-sm" onClick={handleLogout} title="Сменить токен">
-          Выйти
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className="btn-secondary btn-sm"
+            onClick={() => setShowLogsModal(true)}
+            title="Открыть журнал логов и ошибок"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <IconTerminal />
+            Логи
+            {logs.some(l => l.level === 'ERROR') && (
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }}></span>
+            )}
+          </button>
+          {hasBrowserSession && (
+            <button
+              className="btn-secondary btn-sm"
+              onClick={handleHeadlessRefresh}
+              disabled={isRefreshingToken}
+              title="Фоновое продление токена через сохранённую сессию браузера"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <IconRefresh />
+              {isRefreshingToken ? 'Обновление...' : 'Обновить токен'}
+            </button>
+          )}
+          <button className="btn-secondary btn-sm" onClick={handleLogout} title="Сменить токен">
+            Выйти
+          </button>
+        </div>
       </div>
       
       <div className="dashboard-grid">
@@ -532,6 +820,7 @@ export default function App() {
 
         </div>
       </div>
+      {renderLogsModal()}
     </div>
   );
 }

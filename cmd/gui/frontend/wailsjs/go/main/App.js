@@ -10,6 +10,10 @@ export function CheckPlaylistLocalProgress(arg1) {
   return window['go']['main']['App']['CheckPlaylistLocalProgress'](arg1);
 }
 
+export function ClearLogs() {
+  return window['go']['main']['App']['ClearLogs']();
+}
+
 export function ClearToken() {
   return window['go']['main']['App']['ClearToken']();
 }
@@ -30,6 +34,14 @@ export function DownloadUserPlaylist(arg1, arg2) {
   return window['go']['main']['App']['DownloadUserPlaylist'](arg1, arg2);
 }
 
+export function GetAvailableBrowsers() {
+  return window['go']['main']['App']['GetAvailableBrowsers']();
+}
+
+export function GetLogs() {
+  return window['go']['main']['App']['GetLogs']();
+}
+
 export function GetSavePath() {
   return window['go']['main']['App']['GetSavePath']();
 }
@@ -38,8 +50,16 @@ export function GetUserPlaylists() {
   return window['go']['main']['App']['GetUserPlaylists']();
 }
 
+export function HasBrowserSession() {
+  return window['go']['main']['App']['HasBrowserSession']();
+}
+
 export function HasValidToken() {
   return window['go']['main']['App']['HasValidToken']();
+}
+
+export function LoginViaBrowser(arg1) {
+  return window['go']['main']['App']['LoginViaBrowser'](arg1);
 }
 
 export function OpenAuthPage() {
@@ -52,6 +72,10 @@ export function OpenPlaylistFolder(arg1) {
 
 export function ParseAndSaveUrlToken(arg1) {
   return window['go']['main']['App']['ParseAndSaveUrlToken'](arg1);
+}
+
+export function RefreshSessionHeadless() {
+  return window['go']['main']['App']['RefreshSessionHeadless']();
 }
 
 export function SaveToken(arg1) {

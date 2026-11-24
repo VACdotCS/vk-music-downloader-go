@@ -35,7 +35,7 @@ func GetTrackByLinkScenario(savePath string, vkService *api.VkApiService) error 
 	mp3FilePath := filepath.Join(savePath, fileName)
 
 	dl := downloader.NewDownloader()
-	
+
 	// Контекст для отмены одиночной загрузки по Ctrl+C
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()

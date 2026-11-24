@@ -30,7 +30,7 @@ func CatchAudioStreamError(err error, audioMeta api.Audio, fileName string) erro
 	os.WriteFile("errors.json", updatedData, 0644)
 
 	if audioMeta.ContentRestricted != 0 {
-		return fmt.Errorf(audioBlockedMsg)
+		return fmt.Errorf("%s", audioBlockedMsg)
 	}
 
 	return err

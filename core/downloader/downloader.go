@@ -13,9 +13,9 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
-	"syscall"
 
 	"vk-music-downloader-go/core/ffmpeg"
+	"vk-music-downloader-go/core/logger"
 )
 
 type SegmentKey struct {
@@ -44,19 +44,25 @@ func (d *Downloader) doRequest(ctx context.Context, url string) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "KateMobileAndroid/56 lite-460 (Android 4.4.2; SDK 19; x86; unknown Android SDK built for x86; en)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	resp, err := d.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("bad status: %d", resp.StatusCode)
+	}
+
 	return io.ReadAll(resp.Body)
 }
 
 func (d *Downloader) ParseM3U8(ctx context.Context, m3u8Url string) ([]Segment, error) {
 	data, err := d.doRequest(ctx, m3u8Url)
 	if err != nil {
+		logger.Error("ParseM3U8: ошибка запроса плейлиста: %v", err)
 		return nil, err
 	}
 
@@ -111,6 +117,10 @@ func (d *Downloader) ParseM3U8(ctx context.Context, m3u8Url string) ([]Segment, 
 		}
 	}
 
+	if len(segments) == 0 {
+		return nil, fmt.Errorf("m3u8 плейлист не содержит сегментов")
+	}
+
 	return segments, nil
 }
 
@@ -145,11 +155,94 @@ func (d *Downloader) downloadAndDecryptSegment(ctx context.Context, segmentUrl s
 	return decryptedData, nil
 }
 
-// ProcessStream скачивает и расшифровывает все сегменты, затем склеивает и вызывает FFmpeg
-func (d *Downloader) ProcessStream(ctx context.Context, m3u8Url, outputTsFile, outputMp3File string, progressCb func(float64)) error {
-	segments, err := d.ParseM3U8(ctx, m3u8Url)
+func (d *Downloader) downloadDirect(ctx context.Context, audioUrl, outputMp3File string, progressCb func(float64)) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, audioUrl, nil)
 	if err != nil {
 		return err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("bad status: %d", resp.StatusCode)
+	}
+
+	tempFile := outputMp3File + ".part"
+	out, err := os.Create(tempFile)
+	if err != nil {
+		return err
+	}
+
+	cleanup := true
+	defer func() {
+		out.Close()
+		if cleanup {
+			_ = os.Remove(tempFile)
+		}
+	}()
+
+	totalSize := resp.ContentLength
+	var downloaded int64
+	buf := make([]byte, 32*1024)
+
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		n, rErr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, wErr := out.Write(buf[:n]); wErr != nil {
+				return wErr
+			}
+			downloaded += int64(n)
+			if progressCb != nil && totalSize > 0 {
+				progressCb(float64(downloaded) / float64(totalSize))
+			}
+		}
+		if rErr != nil {
+			if rErr == io.EOF {
+				break
+			}
+			return rErr
+		}
+	}
+
+	if downloaded == 0 {
+		return fmt.Errorf("скачанный файл пуст (0 байт)")
+	}
+
+	out.Close()
+	cleanup = false
+
+	_ = os.Remove(outputMp3File)
+	return os.Rename(tempFile, outputMp3File)
+}
+
+// ProcessStream скачивает трек: определяет тип (прямой MP3 или M3U8 HLS поток), скачивает и при необходимости конвертирует.
+func (d *Downloader) ProcessStream(ctx context.Context, streamUrl, outputTsFile, outputMp3File string, progressCb func(float64)) error {
+	if strings.TrimSpace(streamUrl) == "" {
+		return fmt.Errorf("URL аудиозаписи пуст (трек заблокирован)")
+	}
+
+	// Если это прямой MP3 (например okcdn.ru или ссылка на .mp3 файл)
+	if !strings.Contains(streamUrl, ".m3u8") {
+		return d.downloadDirect(ctx, streamUrl, outputMp3File, progressCb)
+	}
+
+	// Иначе это M3U8 HLS поток
+	segments, err := d.ParseM3U8(ctx, streamUrl)
+	if err != nil {
+		return err
+	}
+
+	if len(segments) == 0 {
+		return fmt.Errorf("m3u8 плейлист не содержит сегментов")
 	}
 
 	tsFile, err := os.Create(outputTsFile)
@@ -157,11 +250,15 @@ func (d *Downloader) ProcessStream(ctx context.Context, m3u8Url, outputTsFile, o
 		return err
 	}
 
+	defer func() {
+		tsFile.Close()
+		_ = os.Remove(outputTsFile)
+	}()
+
 	total := len(segments)
 	for i, segment := range segments {
 		// Проверка отмены между кусками
 		if ctx.Err() != nil {
-			tsFile.Close()
 			return ctx.Err()
 		}
 
@@ -169,8 +266,7 @@ func (d *Downloader) ProcessStream(ctx context.Context, m3u8Url, outputTsFile, o
 		if segment.Key != nil && segment.Key.Method == "AES-128" {
 			key, err = d.doRequest(ctx, segment.Key.URI)
 			if err != nil {
-				tsFile.Close()
-				return err
+				return fmt.Errorf("ошибка получения ключа шифрования: %w", err)
 			}
 
 			if segment.Key.IV != "" {
@@ -183,7 +279,9 @@ func (d *Downloader) ProcessStream(ctx context.Context, m3u8Url, outputTsFile, o
 
 		decryptedData, err := d.downloadAndDecryptSegment(ctx, segment.URL, key, iv)
 		if err != nil {
-			tsFile.Close()
+			if ctx.Err() == nil {
+				logger.Error("ProcessStream: ошибка загрузки/дешифровки сегмента %d/%d: %v", i+1, total, err)
+			}
 			return err
 		}
 
@@ -193,26 +291,19 @@ func (d *Downloader) ProcessStream(ctx context.Context, m3u8Url, outputTsFile, o
 
 		_, err = tsFile.Write(decryptedData)
 		if err != nil {
-			tsFile.Close()
 			return err
 		}
 	}
 	tsFile.Close()
 
 	err = TsToMp3(ctx, outputTsFile, outputMp3File)
-	if err == nil {
-		_ = os.Remove(outputTsFile)
-	}
-
 	return err
 }
 
 func TsToMp3(ctx context.Context, inputTs, outputMp3 string) error {
 	cmd := exec.CommandContext(ctx, ffmpeg.GetPath(), "-y", "-i", inputTs, "-acodec", "libmp3lame", "-f", "mp3", outputMp3)
 
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow: true,
-	}
+	setHideWindow(cmd)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -220,6 +311,7 @@ func TsToMp3(ctx context.Context, inputTs, outputMp3 string) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		logger.Error("ffmpeg error: %v, stderr: %s", err, stderr.String())
 		return fmt.Errorf("ffmpeg error: %v, stderr: %s", err, stderr.String())
 	}
 	return nil

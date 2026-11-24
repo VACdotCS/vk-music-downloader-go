@@ -18,6 +18,7 @@ import (
 	"vk-music-downloader-go/core/api"
 	"vk-music-downloader-go/core/cache"
 	"vk-music-downloader-go/core/config"
+	"vk-music-downloader-go/core/logger"
 	"vk-music-downloader-go/core/pool"
 	"vk-music-downloader-go/core/ui"
 	"vk-music-downloader-go/core/utils"
@@ -87,15 +88,15 @@ func DownloadBatchOfTracks(ctx context.Context, toDownload []api.Audio, savePath
 		go func() {
 			ticker := time.NewTicker(150 * time.Millisecond)
 			defer ticker.Stop()
-			
+
 			var lastContent string
-			
+
 			for {
 				select {
 				case <-ticker.C:
 					linesMu.Lock()
 					currentContent := strings.Join(lines, "\n")
-					
+
 					if currentContent != lastContent {
 						if !config.IsGUI {
 							for _, l := range lines {
@@ -146,23 +147,43 @@ func DownloadBatchOfTracks(ctx context.Context, toDownload []api.Audio, savePath
 					return ctx.Err()
 				}
 
-				if _, err := os.Stat(mp3FilePath); err == nil {
-					linesMu.Lock()
-					lines[indexInBatch] = pterm.Green("✅ " + fmt.Sprintf("%d. Пропущен (уже скачан): %s", currentIndex, fileName))
-					linesMu.Unlock()
-					if GUIProgressCallback != nil {
-						GUIProgressCallback(currentIndex, fileName, 1.0, "done")
+				// Проверяем, существует ли уже файл и не битый ли он (размер > 1 КБ)
+				if fi, err := os.Stat(mp3FilePath); err == nil {
+					if fi.Size() > 1024 {
+						linesMu.Lock()
+						lines[indexInBatch] = pterm.Green("✅ " + fmt.Sprintf("%d. Пропущен (уже скачан): %s", currentIndex, fileName))
+						linesMu.Unlock()
+						if GUIProgressCallback != nil {
+							GUIProgressCallback(currentIndex, fileName, 1.0, "done")
+						}
+						return nil
 					}
-					return nil
+					// Если файл 0 байт или битый — удаляем перед повторным скачиванием
+					_ = os.Remove(mp3FilePath)
+				}
+
+				// Если трек заблокирован правообладателем или у него нет ссылки
+				if strings.TrimSpace(audio.URL) == "" {
+					linesMu.Lock()
+					lines[indexInBatch] = pterm.Red("❌ " + fmt.Sprintf("%d. Заблокирован правообладателем: %s - %s", currentIndex, audio.Artist, audio.Title))
+					linesMu.Unlock()
+
+					logger.Warn("Трек [%d. %s - %s] заблокирован правообладателем (URL пуст)", currentIndex, audio.Artist, audio.Title)
+					_ = cache.CatchAudioStreamError(fmt.Errorf("трек заблокирован (URL отсутствует)"), audio, fileName)
+
+					if GUIProgressCallback != nil {
+						GUIProgressCallback(currentIndex, fileName, 0, "error")
+					}
+					return fmt.Errorf("трек заблокирован (URL отсутствует)")
 				}
 
 				progressCb := func(percentage float64) {
 					progressStr := ui.RenderDownloaderProgress(percentage, utf8.RuneCountInString(taskTitle), maxTitleLength, 0)
-					
+
 					linesMu.Lock()
 					lines[indexInBatch] = "🔄 " + taskTitle + " " + progressStr
 					linesMu.Unlock()
-					
+
 					if GUIProgressCallback != nil {
 						GUIProgressCallback(currentIndex, fileName, percentage, "downloading")
 					}
@@ -178,12 +199,14 @@ func DownloadBatchOfTracks(ctx context.Context, toDownload []api.Audio, savePath
 						return err
 					}
 
+					logger.Error("Ошибка скачивания [%d. %s]: %v", currentIndex, fileName, err)
+
 					_ = cache.CatchAudioStreamError(err, audio, fileName)
-					
+
 					linesMu.Lock()
 					lines[indexInBatch] = pterm.Red("❌ " + fmt.Sprintf("%d. Ошибка скачивания: %s - %s", currentIndex, audio.Artist, audio.Title))
 					linesMu.Unlock()
-					
+
 					if GUIProgressCallback != nil {
 						if strings.Contains(err.Error(), "bad status: 401") {
 							GUIProgressCallback(currentIndex, fileName, 0, "error-token")
@@ -197,15 +220,15 @@ func DownloadBatchOfTracks(ctx context.Context, toDownload []api.Audio, savePath
 				successTitle := fmt.Sprintf("%d. Трек успешно скачан: %s", currentIndex, fileName)
 				marginCorr := int(mathAbs(utf8.RuneCountInString(successTitle) - utf8.RuneCountInString(taskTitle)))
 				progressStr := ui.RenderDownloaderProgress(1.0, utf8.RuneCountInString(taskTitle), maxTitleLength, marginCorr)
-				
+
 				linesMu.Lock()
 				lines[indexInBatch] = pterm.Green("✅ " + successTitle + " " + progressStr)
 				linesMu.Unlock()
-				
+
 				if GUIProgressCallback != nil {
 					GUIProgressCallback(currentIndex, fileName, 1.0, "done")
 				}
-				
+
 				return nil
 			})
 		}
@@ -213,7 +236,7 @@ func DownloadBatchOfTracks(ctx context.Context, toDownload []api.Audio, savePath
 		workerPool.Start()
 		workerPool.Wait()
 		wg.Wait()
-		
+
 		close(done)
 		writer.Stop()
 

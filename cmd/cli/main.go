@@ -1,19 +1,20 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/mattn/go-colorable"
 	"github.com/pterm/pterm"
 	"vk-music-downloader-go/core/api"
+	"vk-music-downloader-go/core/browser"
 	"vk-music-downloader-go/core/cache"
 	"vk-music-downloader-go/core/config"
 	"vk-music-downloader-go/core/ffmpeg"
@@ -97,40 +98,64 @@ func openBrowserURL(url string) {
 }
 
 func getAccessTokenData() error {
-	prompt := &survey.Input{
-		Message: "Введите свой access token (JSON объект), или введите 'help' для открытия гайда в браузере:",
+	choices := []string{
+		"🌐 Войти через браузер (Автоматически, с сохранением сессии)",
+		"🔑 Вставить токен вручную (Kate Mobile JSON)",
+		"❓ Открыть гайд в браузере",
 	}
-	var dataStr string
-	
-	for {
-		if err := survey.AskOne(prompt, &dataStr); err != nil {
+
+	var choice string
+	prompt := &survey.Select{
+		Message: "Способ авторизации:",
+		Options: choices,
+	}
+	if err := survey.AskOne(prompt, &choice); err != nil {
+		return err
+	}
+
+	switch choice {
+	case choices[0]:
+		pterm.Info.Println("Запускаем браузер...")
+		pterm.Info.Println("Пожалуйста, войдите в аккаунт ВКонтакте и разрешите доступ.")
+		pterm.Info.Println("Окно закроется автоматически сразу после завершения.")
+		tok, err := browser.LoginInteractive(context.Background())
+		if err != nil {
+			pterm.Error.Printf("Ошибка авторизации: %v\n", err)
 			return err
 		}
+		myConfig.Token = tok
+		_ = config.SaveConfig(myConfig)
+		initVkService()
+		pterm.Success.Println("Авторизация через браузер прошла успешно! Сессия сохранена.")
+		return nil
 
-		if strings.ToLower(strings.TrimSpace(dataStr)) == "help" {
-			pterm.Info.Println("Открываем гайд в браузере...")
-			openBrowserURL("https://github.com/VACdotCS/vk-music-downloader")
-			continue
+	case choices[1]:
+		inputPrompt := &survey.Input{
+			Message: "Введите свой access token (JSON объект):",
 		}
-		
-		break
+		var dataStr string
+		if err := survey.AskOne(inputPrompt, &dataStr); err != nil {
+			return err
+		}
+		var tokenJson struct {
+			Data *config.Token `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(dataStr), &tokenJson); err != nil || tokenJson.Data == nil {
+			pterm.Error.Println("Неверный формат. Ожидался JSON с полем data.")
+			return fmt.Errorf("invalid token format")
+		}
+		myConfig.Token = tokenJson.Data
+		_ = config.SaveConfig(myConfig)
+		initVkService()
+		pterm.Success.Println("Токен успешно сохранен!")
+		return nil
+
+	case choices[2]:
+		pterm.Info.Println("Открываем гайд в браузере...")
+		openBrowserURL("https://github.com/VACdotCS/vk-music-downloader")
+		return getAccessTokenData()
 	}
 
-	var tokenJson struct {
-		Data *config.Token `json:"data"`
-	}
-
-	if err := json.Unmarshal([]byte(dataStr), &tokenJson); err != nil || tokenJson.Data == nil {
-		// fallback если пользователь ввел просто токен, хотя в оригинале ждется JSON
-		pterm.Error.Println("Неверный формат. Ожидался JSON с полем data.")
-		return fmt.Errorf("invalid token format")
-	}
-
-	myConfig.Token = tokenJson.Data
-	config.SaveConfig(myConfig)
-	initVkService()
-
-	pterm.Success.Println("Токен успешно сохранен!")
 	return nil
 }
 
@@ -144,17 +169,28 @@ func checkToken() error {
 	if myConfig.Token == nil {
 		return nil
 	}
-	
-	// В JS, если `expires` отсутствует, он равен undefined.
-	// Сравнение (Date.now() >= undefined) даёт false. 
-	// В Go отсутствующее поле парсится как 0. Из-за этого токен "протухал" мгновенно.
+
 	if myConfig.Token.Expires <= 0 {
 		return nil
 	}
 
 	currentTime := time.Now().Unix()
 	if currentTime >= myConfig.Token.Expires {
-		pterm.Warning.Println("Токен истёк, нужен новый.")
+		// Обновлять токен через headless можно ТОЛЬКО ЕСЛИ ЕСТЬ СОХРАНЁННАЯ СЕССИЯ БРАУЗЕРА!
+		if browser.HasSavedSession() {
+			pterm.Warning.Println("Токен истёк. Найдена сессия браузера, пробуем обновить в фоне...")
+			token, err := browser.RefreshTokenHeadless(context.Background())
+			if err == nil && token != nil {
+				myConfig.Token = token
+				_ = config.SaveConfig(myConfig)
+				initVkService()
+				pterm.Success.Println("Токен успешно продлен в фоновом режиме!")
+				return nil
+			}
+			pterm.Warning.Println("Фоновое обновление не удалось (сессия браузера протухла). Требуется повторный вход.")
+		} else {
+			pterm.Warning.Println("Токен истёк. Сохранённой сессии браузера нет, требуется ввод токена:")
+		}
 		return getAccessTokenData()
 	}
 	return nil
@@ -189,6 +225,7 @@ func mainMenu() bool {
 		"⚙️ Очистить весь кэш (удалит всё, кроме пути сохранения треков)",
 		"⚙️ Вывести заблокированные треки",
 		"⚙️ Получить бесконечный токен",
+		"🌐 Авторизоваться / Обновить токен через браузер",
 		"🚪👋 Выход",
 	}
 
@@ -230,6 +267,17 @@ func mainMenu() bool {
 			initVkService()
 		}
 	case choices[11]:
+		pterm.Info.Println("Запускаем браузер для авторизации...")
+		tok, err := browser.LoginInteractive(context.Background())
+		if err != nil {
+			pterm.Error.Printf("Ошибка авторизации: %v\n", err)
+		} else {
+			myConfig.Token = tok
+			_ = config.SaveConfig(myConfig)
+			initVkService()
+			pterm.Success.Println("Сессия успешно сохранена!")
+		}
+	case choices[12]:
 		cache.ClearTempFiles(myConfig.SavePath)
 		pterm.Info.Println("До свидания!")
 		return false

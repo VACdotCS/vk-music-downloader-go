@@ -4,8 +4,8 @@
 package main
 
 import (
-	"os"
 	"golang.org/x/sys/windows"
+	"os"
 )
 
 func init() {

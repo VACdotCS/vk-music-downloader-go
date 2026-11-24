@@ -8,13 +8,13 @@ echo.
 echo 🪟  [1/3] CLI — Windows (amd64)...
 set GOOS=windows
 set GOARCH=amd64
-go build -ldflags="-s -w" -o release\vk-music-downloader-cli-windows-amd64.exe cmd\cli\main.go
+go build -ldflags="-s -w" -o release\vk-music-downloader-cli-windows-amd64.exe ./cmd/cli
 if errorlevel 1 ( echo ❌ Ошибка сборки CLI Windows & pause & exit /b 1 )
 
 echo 🐧  [2/3] CLI — Linux (amd64)...
 set GOOS=linux
 set GOARCH=amd64
-go build -ldflags="-s -w" -o release\vk-music-downloader-cli-linux-amd64 cmd\cli\main.go
+go build -ldflags="-s -w" -o release\vk-music-downloader-cli-linux-amd64 ./cmd/cli
 if errorlevel 1 ( echo ❌ Ошибка сборки CLI Linux & pause & exit /b 1 )
 
 echo 🖥️  [3/3] GUI — Windows (wails build)...

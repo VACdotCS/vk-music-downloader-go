@@ -59,6 +59,48 @@ export namespace api {
 
 }
 
+export namespace browser {
+	
+	export class BrowserInfo {
+	    Path: string;
+	    Type: string;
+	    Name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BrowserInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Path = source["Path"];
+	        this.Type = source["Type"];
+	        this.Name = source["Name"];
+	    }
+	}
+
+}
+
+export namespace logger {
+	
+	export class LogEntry {
+	    timestamp: string;
+	    level: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LogEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.timestamp = source["timestamp"];
+	        this.level = source["level"];
+	        this.message = source["message"];
+	    }
+	}
+
+}
+
 export namespace main {
 	
 	export class LocalProgress {

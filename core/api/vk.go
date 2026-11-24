@@ -36,7 +36,7 @@ func (s *VkApiService) get(url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "KateMobileAndroid/56 lite-460 (Android 4.4.2; SDK 19; x86; unknown Android SDK built for x86; en)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -53,57 +53,111 @@ func (s *VkApiService) get(url string) ([]byte, error) {
 }
 
 func (s *VkApiService) GetAudiosList() ([]Audio, error) {
-	url := fmt.Sprintf("https://api.vk.com/method/audio.get?owner_id=%d&access_token=%s&v=5.131&count=6000", s.userID, s.accessToken)
-	data, err := s.get(url)
-	if err != nil {
-		return nil, err
+	var allAudios []Audio
+	offset := 0
+	batchSize := 1000
+
+	for {
+		url := fmt.Sprintf("https://api.vk.ru/method/audio.get?owner_id=%d&access_token=%s&v=5.289&client_id=6287487&count=%d&offset=%d", s.userID, s.accessToken, batchSize, offset)
+		data, err := s.get(url)
+		if err != nil {
+			return nil, err
+		}
+
+		var vkResp VkAudioResponse
+		if err := json.Unmarshal(data, &vkResp); err != nil {
+			return nil, err
+		}
+		if vkResp.Error != nil {
+			return nil, fmt.Errorf("API Error: %s", vkResp.Error.ErrorMsg)
+		}
+
+		items := vkResp.Response.Items
+		if len(items) == 0 {
+			break
+		}
+
+		allAudios = append(allAudios, items...)
+		offset += len(items)
+
+		if offset >= vkResp.Response.Count || len(items) < batchSize {
+			break
+		}
 	}
 
-	var vkResp VkAudioResponse
-	if err := json.Unmarshal(data, &vkResp); err != nil {
-		return nil, err
-	}
-	if vkResp.Error != nil {
-		return nil, fmt.Errorf("API Error: %s", vkResp.Error.ErrorMsg)
-	}
-
-	return vkResp.Response.Items, nil
+	return allAudios, nil
 }
 
 func (s *VkApiService) GetPlaylists() ([]Playlist, error) {
-	url := fmt.Sprintf("https://api.vk.com/method/audio.getPlaylists?owner_id=%d&access_token=%s&v=5.131&count=200", s.userID, s.accessToken)
-	data, err := s.get(url)
-	if err != nil {
-		return nil, err
+	var allPlaylists []Playlist
+	offset := 0
+	batchSize := 200
+
+	for {
+		url := fmt.Sprintf("https://api.vk.ru/method/audio.getPlaylists?owner_id=%d&access_token=%s&v=5.289&client_id=6287487&count=%d&offset=%d", s.userID, s.accessToken, batchSize, offset)
+		data, err := s.get(url)
+		if err != nil {
+			return nil, err
+		}
+
+		var vkResp VkPlaylistsResponse
+		if err := json.Unmarshal(data, &vkResp); err != nil {
+			return nil, err
+		}
+		if vkResp.Error != nil {
+			return nil, fmt.Errorf("API Error: %s", vkResp.Error.ErrorMsg)
+		}
+
+		items := vkResp.Response.Items
+		if len(items) == 0 {
+			break
+		}
+
+		allPlaylists = append(allPlaylists, items...)
+		offset += len(items)
+
+		if offset >= vkResp.Response.Count || len(items) < batchSize {
+			break
+		}
 	}
 
-	var vkResp VkPlaylistsResponse
-	if err := json.Unmarshal(data, &vkResp); err != nil {
-		return nil, err
-	}
-	if vkResp.Error != nil {
-		return nil, fmt.Errorf("API Error: %s", vkResp.Error.ErrorMsg)
-	}
-
-	return vkResp.Response.Items, nil
+	return allPlaylists, nil
 }
 
 func (s *VkApiService) GetTracksOfUserPlaylist(playlistID int) ([]Audio, error) {
-	url := fmt.Sprintf("https://api.vk.com/method/audio.get?owner_id=%d&access_token=%s&v=5.131&playlist_id=%d", s.userID, s.accessToken, playlistID)
-	data, err := s.get(url)
-	if err != nil {
-		return nil, err
+	var allAudios []Audio
+	offset := 0
+	batchSize := 1000
+
+	for {
+		url := fmt.Sprintf("https://api.vk.ru/method/audio.get?owner_id=%d&access_token=%s&v=5.289&client_id=6287487&playlist_id=%d&count=%d&offset=%d", s.userID, s.accessToken, playlistID, batchSize, offset)
+		data, err := s.get(url)
+		if err != nil {
+			return nil, err
+		}
+
+		var vkResp VkAudioResponse
+		if err := json.Unmarshal(data, &vkResp); err != nil {
+			return nil, err
+		}
+		if vkResp.Error != nil {
+			return nil, fmt.Errorf("API Error: %s", vkResp.Error.ErrorMsg)
+		}
+
+		items := vkResp.Response.Items
+		if len(items) == 0 {
+			break
+		}
+
+		allAudios = append(allAudios, items...)
+		offset += len(items)
+
+		if offset >= vkResp.Response.Count || len(items) < batchSize {
+			break
+		}
 	}
 
-	var vkResp VkAudioResponse
-	if err := json.Unmarshal(data, &vkResp); err != nil {
-		return nil, err
-	}
-	if vkResp.Error != nil {
-		return nil, fmt.Errorf("API Error: %s", vkResp.Error.ErrorMsg)
-	}
-
-	return vkResp.Response.Items, nil
+	return allAudios, nil
 }
 
 func (s *VkApiService) GetTracksOfPlaylistByLink(link string) ([]Audio, error) {
@@ -118,21 +172,39 @@ func (s *VkApiService) GetTracksOfPlaylistByLink(link string) ([]Audio, error) {
 		return nil, fmt.Errorf("неверный формат ссылки на плейлист")
 	}
 
-	url := fmt.Sprintf("https://api.vk.com/method/audio.get?owner_id=%s&playlist_id=%s&access_key=%s&access_token=%s&v=5.131&count=200", parts[0], parts[1], parts[2], s.accessToken)
-	data, err := s.get(url)
-	if err != nil {
-		return nil, err
+	var allAudios []Audio
+	offset := 0
+	batchSize := 1000
+
+	for {
+		url := fmt.Sprintf("https://api.vk.ru/method/audio.get?owner_id=%s&playlist_id=%s&access_key=%s&access_token=%s&v=5.289&client_id=6287487&count=%d&offset=%d", parts[0], parts[1], parts[2], s.accessToken, batchSize, offset)
+		data, err := s.get(url)
+		if err != nil {
+			return nil, err
+		}
+
+		var vkResp VkAudioResponse
+		if err := json.Unmarshal(data, &vkResp); err != nil {
+			return nil, err
+		}
+		if vkResp.Error != nil {
+			return nil, fmt.Errorf("API Error: %s", vkResp.Error.ErrorMsg)
+		}
+
+		items := vkResp.Response.Items
+		if len(items) == 0 {
+			break
+		}
+
+		allAudios = append(allAudios, items...)
+		offset += len(items)
+
+		if offset >= vkResp.Response.Count || len(items) < batchSize {
+			break
+		}
 	}
 
-	var vkResp VkAudioResponse
-	if err := json.Unmarshal(data, &vkResp); err != nil {
-		return nil, err
-	}
-	if vkResp.Error != nil {
-		return nil, fmt.Errorf("API Error: %s", vkResp.Error.ErrorMsg)
-	}
-
-	return vkResp.Response.Items, nil
+	return allAudios, nil
 }
 
 func (s *VkApiService) GetAudioByLink(link string) (*Audio, error) {
@@ -146,8 +218,8 @@ func (s *VkApiService) GetAudioByLink(link string) (*Audio, error) {
 	audioID := matches[2]
 
 	urls := []string{
-		fmt.Sprintf("https://api.vk.com/method/audio.getById?audios=%s_%s&access_token=%s&v=5.131", ownerID, audioID, s.accessToken),
-		fmt.Sprintf("https://api.vk.com/method/audio.getById?audios=-%s_%s&access_token=%s&v=5.131", ownerID, audioID, s.accessToken),
+		fmt.Sprintf("https://api.vk.ru/method/audio.getById?audios=%s_%s&access_token=%s&v=5.289&client_id=6287487", ownerID, audioID, s.accessToken),
+		fmt.Sprintf("https://api.vk.ru/method/audio.getById?audios=-%s_%s&access_token=%s&v=5.289&client_id=6287487", ownerID, audioID, s.accessToken),
 	}
 
 	for _, u := range urls {

@@ -12,8 +12,10 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"vk-music-downloader-go/core/api"
+	"vk-music-downloader-go/core/browser"
 	"vk-music-downloader-go/core/config"
 	"vk-music-downloader-go/core/downloader"
+	"vk-music-downloader-go/core/logger"
 	"vk-music-downloader-go/core/utils"
 )
 
@@ -32,6 +34,10 @@ func NewApp() *App {
 // startup is called when the app starts. The context is saved
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	logger.SetLogHook(func(entry logger.LogEntry) {
+		runtime.EventsEmit(a.ctx, "app-log", entry)
+	})
+	logger.Info("GUI приложение запущено")
 	cfg, _ := config.LoadConfig()
 	a.config = cfg
 }
@@ -98,10 +104,60 @@ func (a *App) ParseAndSaveUrlToken(tokenLink string) error {
 	return nil
 }
 
-// OpenAuthPage открывает страницу получения токена в браузере
+// OpenAuthPage открывает vk.ru в системном браузере
 func (a *App) OpenAuthPage() {
-	url := "https://oauth.vk.com/authorize?client_id=6463690&scope=1073737727&redirect_uri=https://oauth.vk.com/blank.html&display=page&response_type=token&revoke=1"
-	runtime.BrowserOpenURL(a.ctx, url)
+	runtime.BrowserOpenURL(a.ctx, "https://vk.ru")
+}
+
+// GetAvailableBrowsers возвращает список установленных в системе браузеров
+func (a *App) GetAvailableBrowsers() []browser.BrowserInfo {
+	return browser.DetectAllBrowsers()
+}
+
+// LoginViaBrowser открывает системный браузер (Chrome/Edge/Brave/Firefox) с сохранением профиля,
+// перехватывает токен после авторизации и закрывает браузер.
+func (a *App) LoginViaBrowser(browserPath string) error {
+	token, err := browser.LoginInteractive(context.Background(), browserPath)
+	if err != nil {
+		return err
+	}
+	if a.config == nil {
+		a.config = &config.Config{}
+	}
+	a.config.Token = token
+	return config.SaveConfig(a.config)
+}
+
+// RefreshSessionHeadless запускает браузер в фоновом (headless) режиме и обновляет токен без GUI.
+// Работает ТОЛЬКО если есть сохранённая рабочая сессия в профиле браузера.
+func (a *App) RefreshSessionHeadless() error {
+	if !browser.HasSavedSession() {
+		return fmt.Errorf("нет сохранённой сессии браузера: войдите через браузер")
+	}
+	token, err := browser.RefreshTokenHeadless(context.Background())
+	if err != nil {
+		return err
+	}
+	if a.config == nil {
+		a.config = &config.Config{}
+	}
+	a.config.Token = token
+	return config.SaveConfig(a.config)
+}
+
+// HasBrowserSession проверяет, есть ли сохранённая сессия браузера
+func (a *App) HasBrowserSession() bool {
+	return browser.HasSavedSession()
+}
+
+// GetLogs возвращает все накопленные логи
+func (a *App) GetLogs() []logger.LogEntry {
+	return logger.GetLogs()
+}
+
+// ClearLogs очищает журнал логов
+func (a *App) ClearLogs() {
+	logger.ClearLogs()
 }
 
 // ClearToken удаляет текущий токен (Logout)

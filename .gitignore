@@ -19,6 +19,8 @@ config.json
 errors.json
 *-music-data.json
 temp-*.ts
+**/.browser-profile/
+*.log
 
 # Wails / JS
 node_modules/
