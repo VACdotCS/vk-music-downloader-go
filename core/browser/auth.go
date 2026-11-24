@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -78,6 +79,52 @@ func HasSavedSession() bool {
 	return false
 }
 
+var (
+	activeCmdsMu sync.Mutex
+	activeCmds   = make(map[int]*exec.Cmd)
+)
+
+func registerActiveBrowser(cmd *exec.Cmd) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	activeCmdsMu.Lock()
+	defer activeCmdsMu.Unlock()
+	activeCmds[cmd.Process.Pid] = cmd
+}
+
+func unregisterActiveBrowser(cmd *exec.Cmd) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	activeCmdsMu.Lock()
+	defer activeCmdsMu.Unlock()
+	delete(activeCmds, cmd.Process.Pid)
+}
+
+// CleanupActiveBrowsers принудительно закрывает все запущенные нами процессы браузера (включая всё дерево дочерних процессов).
+// Вызывается при закрытии Wails GUI приложения.
+func CleanupActiveBrowsers() {
+	activeCmdsMu.Lock()
+	cmds := make([]*exec.Cmd, 0, len(activeCmds))
+	for _, cmd := range activeCmds {
+		cmds = append(cmds, cmd)
+	}
+	activeCmds = make(map[int]*exec.Cmd)
+	activeCmdsMu.Unlock()
+
+	for _, cmd := range cmds {
+		if cmd != nil && cmd.Process != nil {
+			pid := cmd.Process.Pid
+			if runtime.GOOS == "windows" {
+				_ = exec.Command("taskkill", "/F", "/T", "/PID", strconv.Itoa(pid)).Run()
+			} else {
+				_ = cmd.Process.Kill()
+			}
+		}
+	}
+}
+
 func findFreePort() int {
 	for p := 9222; p < 9300; p++ {
 		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", p), 80*time.Millisecond)
@@ -89,32 +136,69 @@ func findFreePort() int {
 	return 9222
 }
 
-// closeBrowserGracefully closes specific browser process we launched.
+// closeBrowserGracefully закрывает ТОЛЬКО конкретный процесс браузера, который запустило наше приложение.
+// Никогда не закрывает чужие вкладки и не трогает другие процессы!
 func closeBrowserGracefully(client *http.Client, port int, cmd *exec.Cmd) {
-	// Close all open pages via CDP
-	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/json", port))
-	if err == nil {
-		var targets []CDPTarget
-		if json.NewDecoder(resp.Body).Decode(&targets) == nil {
-			for _, t := range targets {
-				if t.Type == "page" {
-					_, _ = client.Get(fmt.Sprintf("http://127.0.0.1:%d/json/close/%s", port, t.ID))
-				}
-			}
-		}
-		_ = resp.Body.Close()
+	if cmd == nil || cmd.Process == nil {
+		return
 	}
+	unregisterActiveBrowser(cmd)
+	pid := cmd.Process.Pid
+	if runtime.GOOS == "windows" {
+		_ = exec.Command("taskkill", "/F", "/T", "/PID", strconv.Itoa(pid)).Run()
+	} else {
+		_ = cmd.Process.Kill()
+	}
+}
 
-	time.Sleep(300 * time.Millisecond)
+type CDPVersion struct {
+	Browser              string `json:"Browser"`
+	ProtocolVersion      string `json:"Protocol-Version"`
+	UserAgent            string `json:"User-Agent"`
+	V8Version            string `json:"V8-Version"`
+	WebKitVersion        string `json:"WebKit-Version"`
+	WebSocketDebuggerUrl string `json:"webSocketDebuggerUrl"`
+}
 
-	// Terminate ONLY the specific process instance we launched
-	if cmd != nil && cmd.Process != nil {
-		if runtime.GOOS == "windows" {
-			_ = exec.Command("taskkill", "/PID", strconv.Itoa(cmd.Process.Pid)).Run()
-		} else {
-			_ = cmd.Process.Kill()
+func checkCDP(port int) (*CDPVersion, bool) {
+	client := &http.Client{Timeout: 600 * time.Millisecond}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/json/version", port))
+	if err != nil {
+		return nil, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, false
+	}
+	var v CDPVersion
+	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		return nil, false
+	}
+	return &v, true
+}
+
+func openTabViaCDP(port int, targetURL string) (*CDPTarget, error) {
+	client := &http.Client{Timeout: 3 * time.Second}
+	endpoint := fmt.Sprintf("http://127.0.0.1:%d/json/new?%s", port, url.QueryEscape(targetURL))
+
+	req, err := http.NewRequest("PUT", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		resp, err = client.Get(endpoint)
+		if err != nil {
+			return nil, err
 		}
 	}
+	defer resp.Body.Close()
+
+	var target CDPTarget
+	if err := json.NewDecoder(resp.Body).Decode(&target); err != nil {
+		return nil, err
+	}
+	return &target, nil
 }
 
 func cleanupStaleProfileLocks(profileDir string) {
@@ -310,10 +394,167 @@ func getPageList(client *http.Client, jsonURL string) ([]CDPTarget, bool) {
 	return pages, true
 }
 
+// loginViaExistingCDP connects to an already running browser on port and guides auth on vk.ru.
+func loginViaExistingCDP(ctx context.Context, port int) (*config.Token, error) {
+	httpClient := &http.Client{Timeout: 2 * time.Second}
+	jsonURL := fmt.Sprintf("http://127.0.0.1:%d/json", port)
+
+	pages, _ := getPageList(httpClient, jsonURL)
+	var vkTarget *CDPTarget
+	for _, p := range pages {
+		u := strings.ToLower(p.URL)
+		if strings.Contains(u, "vk.ru") || strings.Contains(u, "vk.com") {
+			targetCopy := p
+			vkTarget = &targetCopy
+			break
+		}
+	}
+
+	var createdTargetID string
+	if vkTarget == nil {
+		newTarget, err := openTabViaCDP(port, "https://vk.ru")
+		if err == nil && newTarget != nil {
+			vkTarget = newTarget
+			createdTargetID = newTarget.ID
+		}
+	}
+
+	defer func() {
+		if createdTargetID != "" {
+			_, _ = httpClient.Get(fmt.Sprintf("http://127.0.0.1:%d/json/close/%s", port, createdTargetID))
+		}
+	}()
+
+	ticker := time.NewTicker(700 * time.Millisecond)
+	defer ticker.Stop()
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			logger.Warn("Время ожидания авторизации истекло")
+			return nil, ErrAuthTimeout
+		case <-ticker.C:
+			currentPages, ok := getPageList(httpClient, jsonURL)
+			if !ok {
+				return nil, ErrBrowserClosed
+			}
+			for _, p := range currentPages {
+				if p.WebSocketDebuggerURL == "" {
+					continue
+				}
+				cookies, err := cdpGetCookies(p.WebSocketDebuggerURL)
+				if err != nil {
+					continue
+				}
+				hasSession := false
+				var cookieParts []string
+				for _, c := range cookies {
+					name, _ := c["name"].(string)
+					value, _ := c["value"].(string)
+					if name == "remixsid" && value != "" && value != "DELETED" {
+						hasSession = true
+					}
+					if name != "" {
+						cookieParts = append(cookieParts, name+"="+value)
+					}
+				}
+				if hasSession {
+					logger.Info("Вход в аккаунт ВКонтакте обнаружен. Получаем токен...")
+					cookieStr := strings.Join(cookieParts, "; ")
+					token, err := fetchWebToken(cookieStr)
+					if err != nil {
+						logger.Error("Ошибка web_token: %v", err)
+						continue
+					}
+					logger.Info("Токен успешно получен! User ID: %d", token.UserID)
+					return token, nil
+				}
+			}
+		}
+	}
+}
+
+// refreshViaExistingCDP connects to an already running browser on port and fetches refreshed token.
+func refreshViaExistingCDP(ctx context.Context, port int) (*config.Token, error) {
+	httpClient := &http.Client{Timeout: 2 * time.Second}
+	jsonURL := fmt.Sprintf("http://127.0.0.1:%d/json", port)
+
+	newTarget, err := openTabViaCDP(port, "https://vk.ru")
+	if err != nil || newTarget == nil {
+		return nil, fmt.Errorf("не удалось открыть вкладку через CDP: %w", err)
+	}
+
+	defer func() {
+		_, _ = httpClient.Get(fmt.Sprintf("http://127.0.0.1:%d/json/close/%s", port, newTarget.ID))
+	}()
+
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			return nil, ErrSessionExpired
+		case <-ticker.C:
+			currentPages, ok := getPageList(httpClient, jsonURL)
+			if !ok {
+				return nil, ErrSessionExpired
+			}
+			for _, p := range currentPages {
+				if p.ID == newTarget.ID && p.WebSocketDebuggerURL != "" {
+					cookies, err := cdpGetCookies(p.WebSocketDebuggerURL)
+					if err != nil {
+						continue
+					}
+					hasSession := false
+					var parts []string
+					for _, c := range cookies {
+						n, _ := c["name"].(string)
+						v, _ := c["value"].(string)
+						if n == "remixsid" && v != "" && v != "DELETED" {
+							hasSession = true
+						}
+						if n != "" {
+							parts = append(parts, n+"="+v)
+						}
+					}
+					if hasSession {
+						token, err := fetchWebToken(strings.Join(parts, "; "))
+						if err != nil {
+							return nil, err
+						}
+						return token, nil
+					}
+					u := strings.ToLower(p.URL)
+					if strings.Contains(u, "/login") || strings.Contains(u, "/join") {
+						return nil, ErrSessionExpired
+					}
+				}
+			}
+		}
+	}
+}
+
 // LoginInteractive opens the browser at vk.ru, waits for the user to log in,
 // then grabs session cookies via CDP and exchanges them for an access token.
 func LoginInteractive(ctx context.Context, customBrowserPath ...string) (*config.Token, error) {
 	logger.Info("Инициализация входа через браузер...")
+
+	// Если уже есть запущенный браузер с CDP на порту 9222 (не headless) — прицепляемся к нему напрямую!
+	if cdpVer, ok := checkCDP(9222); ok {
+		isHeadless := strings.Contains(strings.ToLower(cdpVer.Browser+cdpVer.UserAgent), "headless")
+		if !isHeadless {
+			logger.Info("Обнаружен запущенный браузер с CDP на порту 9222 (%s). Прицепляемся напрямую...", cdpVer.Browser)
+			return loginViaExistingCDP(ctx, 9222)
+		}
+	}
+
 	var bInfo *BrowserInfo
 	var err error
 
@@ -363,6 +604,7 @@ func LoginInteractive(ctx context.Context, customBrowserPath ...string) (*config
 		logger.Error("Ошибка запуска браузера: %v", err)
 		return nil, fmt.Errorf("ошибка запуска браузера %s: %w", bInfo.Name, err)
 	}
+	registerActiveBrowser(cmd)
 	logger.Info("Браузер запущен (PID %d). Войдите в аккаунт ВКонтакте...", cmd.Process.Pid)
 
 	httpClient := &http.Client{Timeout: 1 * time.Second}
@@ -467,6 +709,17 @@ func RefreshTokenHeadless(ctx context.Context, customBrowserPath ...string) (*co
 		return nil, ErrSessionExpired
 	}
 
+	// Если уже есть активный CDP порт (например, 9222) — пробуем тихо обновить через него
+	if _, ok := checkCDP(9222); ok {
+		logger.Info("Обнаружен активный порт CDP 9222. Пробуем тихо обновить токен через существующий браузер...")
+		token, err := refreshViaExistingCDP(ctx, 9222)
+		if err == nil && token != nil {
+			logger.Info("Токен успешно обновлён через существующий процесс браузера!")
+			return token, nil
+		}
+		logger.Warn("Обновление через существующий CDP не удалось (%v), запускаем отдельный headless процесс...", err)
+	}
+
 	logger.Info("Запуск тихого (headless) обновления токена...")
 	var bInfo *BrowserInfo
 	var err error
@@ -513,6 +766,7 @@ func RefreshTokenHeadless(ctx context.Context, customBrowserPath ...string) (*co
 		logger.Error("Ошибка старта headless браузера: %v", err)
 		return nil, fmt.Errorf("ошибка запуска headless браузера: %w", err)
 	}
+	registerActiveBrowser(cmd)
 
 	httpClient := &http.Client{Timeout: 2 * time.Second}
 	jsonURL := fmt.Sprintf("http://127.0.0.1:%d/json", port)

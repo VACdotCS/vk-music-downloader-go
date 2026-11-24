@@ -2,6 +2,7 @@ package logger
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -29,6 +30,12 @@ func SetLogHook(hook func(entry LogEntry)) {
 // Log adds a new log message with level and format.
 func Log(level, format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
+	// Sanitize and limit length to prevent WebView / React crashes on large outputs (e.g. ffmpeg stderr)
+	if len(msg) > 1500 {
+		msg = msg[:1497] + "..."
+	}
+	msg = strings.ReplaceAll(msg, "\x00", "")
+
 	entry := LogEntry{
 		Timestamp: time.Now().Format("15:04:05"),
 		Level:     level,

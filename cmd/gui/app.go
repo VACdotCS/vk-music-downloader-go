@@ -42,6 +42,12 @@ func (a *App) startup(ctx context.Context) {
 	a.config = cfg
 }
 
+// shutdown is called when the app closes
+func (a *App) shutdown(ctx context.Context) {
+	logger.Info("GUI приложение закрывается, очищаем дочерние процессы браузера...")
+	browser.CleanupActiveBrowsers()
+}
+
 // CancelDownload прерывает текущую загрузку
 func (a *App) CancelDownload() {
 	if a.downloadCancel != nil {
@@ -51,7 +57,7 @@ func (a *App) CancelDownload() {
 
 // HasValidToken проверяет, есть ли токен
 func (a *App) HasValidToken() bool {
-	return a.config != nil && a.config.Token != nil
+	return a.config != nil && a.config.Token != nil && a.config.Token.AccessToken != ""
 }
 
 // SaveToken сохраняет токен из JSON строки (Kate Mobile)
@@ -202,11 +208,69 @@ func (a *App) initProgressCallback() {
 	}
 }
 
+func (a *App) ensureValidToken() error {
+	if a.config != nil && a.config.Token != nil && a.config.Token.AccessToken != "" {
+		return nil
+	}
+	if browser.HasSavedSession() {
+		logger.Info("Токен отсутствует в конфиге. Запускаем фоновое обновление через сессию браузера...")
+		token, err := browser.RefreshTokenHeadless(context.Background())
+		if err == nil && token != nil {
+			if a.config == nil {
+				a.config = &config.Config{}
+			}
+			a.config.Token = token
+			_ = config.SaveConfig(a.config)
+			return nil
+		}
+	}
+	return fmt.Errorf("нет токена и нет сохранённой сессии браузера")
+}
+
+func isAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "authorization failed") ||
+		strings.Contains(msg, "token has expired") ||
+		strings.Contains(msg, "invalid token") ||
+		strings.Contains(msg, "bad status: 401") ||
+		strings.Contains(msg, "error_code: 5") ||
+		strings.Contains(msg, "code 5") ||
+		strings.Contains(msg, "error-token")
+}
+
+func (a *App) executeWithTokenRetry(fn func(vkService *api.VkApiService) error) error {
+	if err := a.ensureValidToken(); err != nil {
+		return err
+	}
+	vkService := api.NewVkApiService(a.config.Token.AccessToken, a.config.Token.UserID)
+	err := fn(vkService)
+	if err != nil && isAuthError(err) && browser.HasSavedSession() {
+		logger.Warn("Токен устарел или отклонён (%v). Автоматически обновляем в фоне через сессию браузера...", err)
+		token, refreshErr := browser.RefreshTokenHeadless(context.Background())
+		if refreshErr == nil && token != nil {
+			a.config.Token = token
+			_ = config.SaveConfig(a.config)
+			vkService = api.NewVkApiService(token.AccessToken, token.UserID)
+			logger.Info("Токен успешно обновлён в фоне! Повторяем запрос...")
+			return fn(vkService)
+		}
+		logger.Error("Не удалось обновить токен в фоне: %v", refreshErr)
+	}
+	return err
+}
+
 // DownloadTrack скачивает один трек по ссылке
 func (a *App) DownloadTrack(link string) error {
 	a.initProgressCallback()
-	vkService := api.NewVkApiService(a.config.Token.AccessToken, a.config.Token.UserID)
-	audioData, err := vkService.GetAudioByLink(link)
+	var audioData *api.Audio
+	err := a.executeWithTokenRetry(func(vkService *api.VkApiService) error {
+		var e error
+		audioData, e = vkService.GetAudioByLink(link)
+		return e
+	})
 	if err != nil {
 		return err
 	}
@@ -222,9 +286,12 @@ func (a *App) DownloadTrack(link string) error {
 // DownloadPlaylist скачивает плейлист по ссылке
 func (a *App) DownloadPlaylist(link string) error {
 	a.initProgressCallback()
-	vkService := api.NewVkApiService(a.config.Token.AccessToken, a.config.Token.UserID)
-	
-	tracks, err := vkService.GetTracksOfPlaylistByLink(link)
+	var tracks []api.Audio
+	err := a.executeWithTokenRetry(func(vkService *api.VkApiService) error {
+		var e error
+		tracks, e = vkService.GetTracksOfPlaylistByLink(link)
+		return e
+	})
 	if err != nil {
 		return err
 	}
@@ -242,16 +309,24 @@ func (a *App) DownloadPlaylist(link string) error {
 
 // GetUserPlaylists возвращает список плейлистов пользователя
 func (a *App) GetUserPlaylists() ([]api.Playlist, error) {
-	vkService := api.NewVkApiService(a.config.Token.AccessToken, a.config.Token.UserID)
-	return vkService.GetPlaylists()
+	var pls []api.Playlist
+	err := a.executeWithTokenRetry(func(vkService *api.VkApiService) error {
+		var e error
+		pls, e = vkService.GetPlaylists()
+		return e
+	})
+	return pls, err
 }
 
 // DownloadUserPlaylist скачивает конкретный плейлист пользователя по ID в свою папку
 func (a *App) DownloadUserPlaylist(playlistID int, title string) error {
 	a.initProgressCallback()
-	vkService := api.NewVkApiService(a.config.Token.AccessToken, a.config.Token.UserID)
-	
-	tracks, err := vkService.GetTracksOfUserPlaylist(playlistID)
+	var tracks []api.Audio
+	err := a.executeWithTokenRetry(func(vkService *api.VkApiService) error {
+		var e error
+		tracks, e = vkService.GetTracksOfUserPlaylist(playlistID)
+		return e
+	})
 	if err != nil {
 		return err
 	}
@@ -362,18 +437,19 @@ func (a *App) CheckPlaylistLocalProgress(title string) LocalProgress {
 // DownloadAllAudio запускает скачивание всех сохраненных треков (не плейлистов)
 func (a *App) DownloadAllAudio() error {
 	a.initProgressCallback()
-	vkService := api.NewVkApiService(a.config.Token.AccessToken, a.config.Token.UserID)
+	var audioList []api.Audio
+	err := a.executeWithTokenRetry(func(vkService *api.VkApiService) error {
+		var e error
+		audioList, e = vkService.GetAudiosList()
+		return e
+	})
+	if err != nil {
+		return err
+	}
 	
 	ctx, cancel := context.WithCancel(context.Background())
 	a.downloadCancel = cancel
 	defer cancel()
-	
-	// Получаем список всех треков пользователя
-	
-	audioList, err := vkService.GetAudiosList()
-	if err != nil {
-		return err
-	}
 
 	for i, j := 0, len(audioList)-1; i < j; i, j = i+1, j-1 {
 		audioList[i], audioList[j] = audioList[j], audioList[i]

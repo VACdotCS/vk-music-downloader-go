@@ -92,7 +92,11 @@ export default function App() {
 
       // Авто-логаут при протухании токена (400 ошибки)
       if (data.status === 'error-token') {
-        ClearToken().then(() => window.location.reload());
+        tryAutoRefreshToken().then(refreshed => {
+          if (!refreshed) {
+            ClearToken().then(() => checkToken());
+          }
+        });
       }
     });
 
@@ -223,8 +227,15 @@ export default function App() {
       if (errStr.includes('context canceled') || errStr.includes('canceled')) {
         return;
       }
-      if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
-        await tryAutoRefreshToken();
+      if (errStr.includes('access_token has expired') || errStr.includes('authorization failed') || errStr.includes('401')) {
+        const refreshed = await tryAutoRefreshToken();
+        if (refreshed) {
+          try {
+            await fn();
+          } catch (retryErr) {
+            console.error('Повторная попытка после обновления токена не удалась:', retryErr);
+          }
+        }
       }
       console.error('Ошибка загрузки:', errStr);
     }
@@ -276,9 +287,12 @@ export default function App() {
       if (errStr.includes('context canceled') || errStr.includes('canceled')) {
         return;
       }
-      if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
-        await ClearToken();
-        checkToken();
+      if (errStr.includes('access_token has expired') || errStr.includes('authorization failed') || errStr.includes('401')) {
+        const refreshed = await tryAutoRefreshToken();
+        if (refreshed) {
+          // Пробуем перезагрузить список плейлистов с новым токеном
+          return handleLoadPlaylists();
+        }
       } else {
         console.error('Ошибка при получении плейлистов:', e);
       }
@@ -320,10 +334,31 @@ export default function App() {
           }
         } catch (e) {
           const errStr = String(e);
-          if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
-            await ClearToken();
-            checkToken();
-            return; // выходим из всей функции, finally не нужен — страница перерисуется
+          if (errStr.includes('context canceled') || errStr.includes('canceled')) {
+            break;
+          }
+          if (errStr.includes('access_token has expired') || errStr.includes('authorization failed') || errStr.includes('401')) {
+            const refreshed = await tryAutoRefreshToken();
+            if (refreshed) {
+              // Повторяем скачивание этого же плейлиста с обновленным токеном!
+              try {
+                await DownloadUserPlaylist(p.id, p.title);
+                setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
+                const localProgress = await CheckPlaylistLocalProgress(p.title);
+                setPlaylistErrors(prev => ({...prev, [p.id]: localProgress.errors}));
+                if (localProgress.errors > 0) {
+                  const okPercent = Math.min((localProgress.downloaded / safeCount) * 100, 100);
+                  setPlaylistProgresses(prev => ({...prev, [p.id]: okPercent}));
+                }
+                continue;
+              } catch (retryErr) {
+                console.error('Повторная загрузка плейлиста после обновления токена не удалась:', retryErr);
+              }
+            } else {
+              await ClearToken();
+              checkToken();
+              return;
+            }
           }
           console.error('Playlist download error:', e);
           break;
@@ -357,10 +392,28 @@ export default function App() {
       }
     } catch (e) {
       const errStr = String(e);
-      if (errStr.includes('access_token has expired') || errStr.includes('authorization failed')) {
+      if (errStr.includes('context canceled') || errStr.includes('canceled')) {
+        return;
+      }
+      if (errStr.includes('access_token has expired') || errStr.includes('authorization failed') || errStr.includes('401')) {
+        const refreshed = await tryAutoRefreshToken();
+        if (refreshed) {
+          try {
+            await DownloadUserPlaylist(p.id, p.title);
+            setPlaylistProgresses(prev => ({...prev, [p.id]: 100}));
+            const localProgress = await CheckPlaylistLocalProgress(p.title);
+            setPlaylistErrors(prev => ({...prev, [p.id]: localProgress.errors}));
+            if (localProgress.errors > 0) {
+              const safeCount = p.count || 1;
+              const okPercent = Math.min((localProgress.downloaded / safeCount) * 100, 100);
+              setPlaylistProgresses(prev => ({...prev, [p.id]: okPercent}));
+            }
+            return;
+          } catch {}
+        }
         await ClearToken();
         checkToken();
-        return; // выходим раньше finally — checkToken() сам перекинет на экран логина
+        return;
       }
       console.error(e);
     } finally {
@@ -370,19 +423,31 @@ export default function App() {
     }
   };
 
+  const [logsCopied, setLogsCopied] = useState(false);
+
   const renderLogsModal = () => {
     if (!showLogsModal) return null;
-    const filtered = logsFilter === 'errors' ? logs.filter(l => l.level === 'ERROR') : logs;
-    const errorCount = logs.filter(l => l.level === 'ERROR').length;
+    const safeLogs = Array.isArray(logs) ? logs : [];
+    const filtered = logsFilter === 'errors' 
+      ? safeLogs.filter(l => l && String(l.level).toUpperCase() === 'ERROR') 
+      : safeLogs;
+    const errorCount = safeLogs.filter(l => l && String(l.level).toUpperCase() === 'ERROR').length;
 
     const copyLogs = () => {
-      const text = filtered.map(l => `[${l.timestamp}] [${l.level}] ${l.message}`).join('\n');
-      navigator.clipboard.writeText(text);
-      alert('Логи скопированы в буфер обмена!');
+      try {
+        const text = filtered.map(l => `[${l?.timestamp || ''}] [${l?.level || ''}] ${l?.message || ''}`).join('\n');
+        navigator.clipboard.writeText(text);
+        setLogsCopied(true);
+        setTimeout(() => setLogsCopied(false), 2000);
+      } catch (err) {
+        console.error('Failed to copy logs', err);
+      }
     };
 
     const clearAllLogs = async () => {
-      await ClearLogs();
+      try {
+        await ClearLogs();
+      } catch {}
       setLogs([]);
     };
 
@@ -409,7 +474,7 @@ export default function App() {
                 style={logsFilter === 'all' ? { borderColor: 'var(--primary)', color: 'var(--primary)' } : {}}
                 onClick={() => setLogsFilter('all')}
               >
-                Все ({logs.length})
+                Все ({safeLogs.length})
               </button>
               <button
                 className={`btn-secondary btn-sm ${logsFilter === 'errors' ? 'active' : ''}`}
@@ -437,22 +502,27 @@ export default function App() {
                 {logsFilter === 'errors' ? 'Ошибок пока нет ✨' : 'Журнал пуст'}
               </div>
             ) : (
-              filtered.map((l, idx) => (
-                <div key={idx} className={`log-row log-${l.level?.toLowerCase()}`}>
-                  <span className="log-time">[{l.timestamp}]</span>
-                  <span className={`log-badge badge-${l.level?.toLowerCase()}`}>[{l.level}]</span>
-                  <span className="log-msg">{l.message}</span>
-                </div>
-              ))
+              filtered.slice(-300).map((l, idx) => {
+                const lvl = String(l?.level || 'INFO').toLowerCase();
+                const time = String(l?.timestamp || '');
+                const msg = String(l?.message || '');
+                return (
+                  <div key={idx} className={`log-row log-${lvl}`}>
+                    <span className="log-time">[{time}]</span>
+                    <span className={`log-badge badge-${lvl}`}>[{String(l?.level || 'INFO')}]</span>
+                    <span className="log-msg" style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{msg}</span>
+                  </div>
+                );
+              })
             )}
           </div>
 
           <div className="logs-footer">
             <div style={{ display: 'flex', gap: '8px' }}>
               <button className="btn-secondary btn-sm" onClick={copyLogs} disabled={filtered.length === 0}>
-                📋 Скопировать
+                {logsCopied ? '✅ Скопировано!' : '📋 Скопировать'}
               </button>
-              <button className="btn-secondary btn-sm" onClick={clearAllLogs} disabled={logs.length === 0}>
+              <button className="btn-secondary btn-sm" onClick={clearAllLogs} disabled={safeLogs.length === 0}>
                 🗑️ Очистить
               </button>
             </div>
@@ -572,7 +642,7 @@ export default function App() {
               >
                 <IconTerminal />
                 Журнал логов / ошибок
-                {logs.some(l => l.level === 'ERROR') && (
+                {Array.isArray(logs) && logs.some(l => l && l.level === 'ERROR') && (
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }}></span>
                 )}
               </button>
@@ -726,7 +796,7 @@ export default function App() {
           >
             <IconTerminal />
             Логи
-            {logs.some(l => l.level === 'ERROR') && (
+            {Array.isArray(logs) && logs.some(l => l && l.level === 'ERROR') && (
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }}></span>
             )}
           </button>
